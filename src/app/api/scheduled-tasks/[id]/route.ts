@@ -24,7 +24,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       .from("scheduled_tasks")
       .select("*")
       .eq("id", taskId)
-      .single();
+      .maybeSingle();
 
     if (error) throw new Error(error.message);
     if (!data) {
@@ -77,14 +77,29 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     if (is_active !== undefined) updateData.is_active = is_active;
 
     const client = getSupabaseClient();
+
+    // Check if task exists first
+    const { data: existing, error: checkError } = await client
+      .from("scheduled_tasks")
+      .select("id")
+      .eq("id", taskId)
+      .maybeSingle();
+
+    if (checkError) throw new Error(checkError.message);
+    if (!existing) {
+      return NextResponse.json({ error: "任务不存在" }, { status: 404 });
+    }
+
     const { data, error } = await client
       .from("scheduled_tasks")
       .update(updateData)
       .eq("id", taskId)
-      .select()
-      .single();
+      .select();
 
     if (error) throw new Error(error.message);
+    if (!data || data.length === 0) {
+      return NextResponse.json({ error: "任务不存在" }, { status: 404 });
+    }
 
     // Reload scheduler
     if (is_active === false) {
@@ -93,7 +108,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       await reloadScheduler();
     }
 
-    return NextResponse.json({ success: true, data });
+    return NextResponse.json({ success: true, data: data[0] });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "未知错误";
     return NextResponse.json({ error: msg }, { status: 500 });

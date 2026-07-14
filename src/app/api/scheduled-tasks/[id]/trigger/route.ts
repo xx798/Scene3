@@ -24,7 +24,7 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
       .from("scheduled_tasks")
       .select("id, bot_id, prompt_template, name")
       .eq("id", taskId)
-      .single();
+      .maybeSingle();
 
     if (error) throw new Error(error.message);
     if (!task) {

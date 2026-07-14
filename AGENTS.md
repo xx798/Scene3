@@ -22,15 +22,19 @@
 │   │   ├── api/            # 后端 API 路由
 │   │   │   ├── dashboard/  # 数据概览接口 (GET)
 │   │   │   ├── history/    # 诊断记录接口 (GET?date=)
-│   │   │   └── reports/    # 报告接口 (GET, POST generate)
+│   │   │   ├── reports/    # 报告接口 (GET, POST generate)
+│   │   │   └── scheduled-tasks/  # 定时任务管理接口 (CRUD + trigger + logs)
 │   │   ├── history/        # 历史诊断列表页
-│   │   └── reports/        # 报告下载专区页
+│   │   ├── reports/        # 报告下载专区页
+│   │   └── scheduled-tasks/  # 定时任务管理页
 │   ├── components/         # 组件
 │   │   ├── sidebar.tsx     # 侧边栏导航
 │   │   └── ui/             # Shadcn UI 组件库
 │   ├── hooks/              # 自定义 Hooks
 │   ├── lib/                # 工具库
-│   │   └── utils.ts        # 通用工具函数 (cn)
+│   │   ├── utils.ts        # 通用工具函数 (cn)
+│   │   ├── bot-caller.ts   # 扣子智能体调用逻辑
+│   │   └── scheduler.ts    # 定时任务调度引擎 (node-cron)
 │   ├── storage/database/   # 数据库
 │   │   ├── supabase-client.ts  # Supabase 客户端
 │   │   └── shared/schema.ts    # 数据表定义
@@ -55,6 +59,14 @@
   - `excel_url` (text) - 生成的Excel报告下载链接
   - `status` (varchar: normal/abnormal) - 综合状态
   - `created_at` (timestamptz)
+- `scheduled_tasks`: 定时任务配置表
+  - `id` (serial PK), `name` (varchar), `bot_id` (varchar), `cron_expression` (varchar)
+  - `prompt_template` (text) - 发送给智能体的消息模板，支持 `{{now}}`/`{{date}}`/`{{timestamp}}` 变量
+  - `is_active` (boolean), `last_run_at` (timestamptz), `created_at`, `updated_at`
+- `task_execution_logs`: 任务执行日志表
+  - `id` (serial PK), `task_id` (int FK), `status` (varchar: running/success/failed)
+  - `prompt_sent` (text), `response_content` (text), `error_message` (text)
+  - `started_at` (timestamptz), `completed_at` (timestamptz)
 
 ## API 接口
 
@@ -64,6 +76,11 @@
 | `/api/history?date=YYYY-MM-DD` | GET | 按日期查询诊断记录 |
 | `/api/reports` | GET | 获取近7天报告列表 |
 | `/api/reports/generate` | POST | 触发工作流生成 Excel 报告 |
+| `/api/scheduled-tasks` | GET | 获取所有定时任务 |
+| `/api/scheduled-tasks` | POST | 创建定时任务 (body: name, bot_id, cron_expression, prompt_template) |
+| `/api/scheduled-tasks/[id]` | GET/PUT/DELETE | 单个任务查询/更新/删除 |
+| `/api/scheduled-tasks/[id]/trigger` | POST | 手动触发一次任务 |
+| `/api/scheduled-tasks/[id]/logs?limit=N` | GET | 获取任务执行日志 |
 
 ## 工作流集成
 
