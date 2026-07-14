@@ -2,13 +2,14 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, History, FileDown, Stethoscope } from 'lucide-react';
+import { LayoutDashboard, History, FileDown, Stethoscope, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const navItems = [
   { href: '/', label: '数据概览', icon: LayoutDashboard },
   { href: '/history', label: '诊断记录', icon: History },
   { href: '/reports', label: '报告下载', icon: FileDown },
+  { href: '/scheduled-tasks', label: '定时任务', icon: Clock },
 ];
 
 export function Sidebar() {

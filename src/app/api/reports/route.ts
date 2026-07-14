@@ -6,9 +6,11 @@ export const dynamic = 'force-dynamic';
 interface ReportRecord {
   id: number;
   diagnose_time: string;
-  image_url: string;
-  diagnosis_result: string;
+  camera_id: string;
+  site_name_watermark: string;
+  camera_status: string;
   status: string;
+  excel_url: string;
   created_at: string;
 }
 
@@ -24,7 +26,7 @@ export async function GET() {
 
     const { data, error } = await client
       .from('daily_diagnose_data')
-      .select('id, diagnose_time, image_url, diagnosis_result, status, created_at')
+      .select('id, diagnose_time, camera_id, site_name_watermark, camera_status, status, excel_url, created_at')
       .gte('diagnose_time', sevenDaysAgo.toISOString())
       .order('diagnose_time', { ascending: false });
 
@@ -48,12 +50,16 @@ export async function GET() {
     // Build report list
     const reportList = Object.entries(grouped).map(([date, recs]) => {
       const abnormalCount = recs.filter((r) => r.status === 'abnormal').length;
+      const totalCount = recs.length;
+      // Use the first non-empty excel_url as the download URL
+      const excelUrl = recs.find((r) => r.excel_url && r.excel_url.trim())?.excel_url || '';
+
       return {
         date,
         file_name: `诊断报告_${date.replace(/\//g, '-')}.xlsx`,
-        total: recs.length,
+        url: excelUrl,
         abnormal_count: abnormalCount,
-        url: '', // URL will be populated when report is generated
+        total_count: totalCount,
       };
     });
 

@@ -6,8 +6,14 @@ export const dynamic = 'force-dynamic';
 interface DiagnoseRecord {
   id: number;
   diagnose_time: string;
+  camera_id: string;
+  site_name_watermark: string;
+  camera_status: string;
+  camera_abnormal_desc: string;
+  risk_items: unknown;
+  capture_time: string;
   image_url: string;
-  diagnosis_result: string;
+  excel_url: string;
   status: string;
 }
 
@@ -32,7 +38,7 @@ export async function POST(request: NextRequest) {
 
     const { data, error } = await client
       .from('daily_diagnose_data')
-      .select('id, diagnose_time, image_url, diagnosis_result, status')
+      .select('id, diagnose_time, camera_id, site_name_watermark, camera_status, camera_abnormal_desc, risk_items, capture_time, image_url, excel_url, status')
       .gte('diagnose_time', dayStart.toISOString())
       .lte('diagnose_time', dayEnd.toISOString())
       .order('diagnose_time', { ascending: true });
@@ -45,12 +51,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '当日暂无诊断数据，无法生成报告' }, { status: 404 });
     }
 
-    // Prepare input JSON for the workflow
+    // Prepare input JSON for the workflow - match the actual diagnosis output format
     const inputJson = JSON.stringify(records.map((r) => ({
-      diagnose_time: r.diagnose_time,
+      camera_id: r.camera_id,
+      site_name_watermark: r.site_name_watermark || '无',
+      camera_status: r.camera_status,
+      camera_abnormal_desc: r.camera_abnormal_desc || '正常',
+      risk_items: r.risk_items,
+      capture_time: r.capture_time,
       image_url: r.image_url,
-      diagnosis_result: r.diagnosis_result,
-      status: r.status,
+      Excel_url: r.excel_url || '',
     })));
 
     // Call the workflow to generate Excel
@@ -96,7 +106,7 @@ export async function POST(request: NextRequest) {
     let abnormalCount = records.filter((r) => r.status === 'abnormal').length;
 
     if (workflowResult.data) {
-      // The workflow returns the URL directly
+      // The workflow returns JSON string with URL, file_name, abnormal_count
       const outputData = typeof workflowResult.data === 'string'
         ? JSON.parse(workflowResult.data)
         : workflowResult.data;
@@ -104,8 +114,17 @@ export async function POST(request: NextRequest) {
       fileUrl = outputData.URL || outputData.url || '';
       fileName = outputData.file_name || fileName;
       if (outputData.abnormal_count !== undefined) {
-        abnormalCount = outputData.abnormal_count;
+        abnormalCount = Number(outputData.abnormal_count);
       }
+    }
+
+    // Update the excel_url for all records of this date
+    if (fileUrl) {
+      await client
+        .from('daily_diagnose_data')
+        .update({ excel_url: fileUrl })
+        .gte('diagnose_time', dayStart.toISOString())
+        .lte('diagnose_time', dayEnd.toISOString());
     }
 
     return NextResponse.json({

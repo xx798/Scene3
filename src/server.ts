@@ -1,6 +1,7 @@
 import { createServer } from 'http';
 import { parse } from 'url';
 import next from 'next';
+import { initScheduler } from '@/lib/scheduler';
 
 const dev = process.env.COZE_PROJECT_ENV !== 'PROD';
 const hostname = process.env.HOSTNAME || 'localhost';
@@ -11,6 +12,11 @@ const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
 
 app.prepare().then(() => {
+  // Initialize the task scheduler after Next.js is ready
+  initScheduler().catch((err) => {
+    console.error('[Server] 调度引擎初始化失败:', err);
+  });
+
   const server = createServer(async (req, res) => {
     try {
       const parsedUrl = parse(req.url!, true);

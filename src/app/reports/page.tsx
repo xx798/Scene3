@@ -9,6 +9,7 @@ interface ReportItem {
   file_name: string;
   url: string;
   abnormal_count: number;
+  total_count: number;
 }
 
 export default function ReportsPage() {
@@ -172,7 +173,7 @@ export default function ReportsPage() {
                   <div>
                     <p className="text-sm font-medium text-foreground">{report.file_name}</p>
                     <p className="text-xs text-muted-foreground">
-                      {report.date} · 异常 {report.abnormal_count} 条
+                      {report.date} · 共 {report.total_count} 条 · 异常 {report.abnormal_count} 条
                     </p>
                   </div>
                 </div>
