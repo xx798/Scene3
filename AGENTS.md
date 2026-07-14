@@ -43,7 +43,18 @@
 ## 数据表
 
 - `daily_diagnose_data`: AI 诊断记录表
-  - `id` (serial PK), `diagnose_time` (timestamptz), `image_url` (text), `diagnosis_result` (text), `status` (varchar: normal/abnormal), `created_at` (timestamptz)
+  - `id` (serial PK)
+  - `diagnose_time` (timestamptz) - 诊断执行时间
+  - `camera_id` (text) - 摄像头编号
+  - `site_name_watermark` (text) - 水印识别的场地名称
+  - `camera_status` (varchar) - 设备状态：正常/画面遮挡/画面黑屏/画面偏移/信号中断
+  - `camera_abnormal_desc` (text) - 设备异常详情
+  - `risk_items` (jsonb) - 风险检查项数组，每项含 item_name/status/risk_desc
+  - `capture_time` (timestamptz) - 水印识别的图片拍摄时间
+  - `image_url` (text) - 图片URL
+  - `excel_url` (text) - 生成的Excel报告下载链接
+  - `status` (varchar: normal/abnormal) - 综合状态
+  - `created_at` (timestamptz)
 
 ## API 接口
 
