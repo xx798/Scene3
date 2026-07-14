@@ -91,7 +91,7 @@ export async function generateDailyExcelReport(reportDate: string): Promise<{
     { header: "设备异常描述", key: "camera_desc", width: 30 },
     { header: "拍摄时间", key: "capture_time", width: 20 },
     { header: "综合状态", key: "status", width: 10 },
-    { header: "风险项(异常)", key: "risk_abnormal", width: 50 },
+    { header: "风险项明细", key: "risk_all", width: 60 },
   ]
 
   detailSheet.getRow(1).eachCell((cell) => {
@@ -107,9 +107,12 @@ export async function generateDailyExcelReport(reportDate: string): Promise<{
       status: string
       risk_desc: string
     }>
-    const abnormalRisks = riskItems
-      .filter((r) => r.status === "异常")
-      .map((r) => `${r.item_name}: ${r.risk_desc}`)
+    const allRisks = riskItems
+      .map((r) => {
+        if (r.status === "异常") return `${r.item_name}: 异常 - ${r.risk_desc}`
+        if (r.status === "无法识别") return `${r.item_name}: 无法识别`
+        return `${r.item_name}: 正常`
+      })
       .join("\n")
 
     const row = detailSheet.addRow({
@@ -125,7 +128,7 @@ export async function generateDailyExcelReport(reportDate: string): Promise<{
         ? new Date(record.capture_time as string).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })
         : "",
       status: record.status === "normal" ? "正常" : "异常",
-      risk_abnormal: abnormalRisks || "无",
+      risk_all: allRisks || "无",
     })
 
     if (record.status === "abnormal") {
