@@ -19,15 +19,46 @@
 │   └── start.sh            # 生产环境启动脚本
 ├── src/
 │   ├── app/                # 页面路由与布局
-│   ├── components/ui/      # Shadcn UI 组件库
+│   │   ├── api/            # 后端 API 路由
+│   │   │   ├── dashboard/  # 数据概览接口 (GET)
+│   │   │   ├── history/    # 诊断记录接口 (GET?date=)
+│   │   │   └── reports/    # 报告接口 (GET, POST generate)
+│   │   ├── history/        # 历史诊断列表页
+│   │   └── reports/        # 报告下载专区页
+│   ├── components/         # 组件
+│   │   ├── sidebar.tsx     # 侧边栏导航
+│   │   └── ui/             # Shadcn UI 组件库
 │   ├── hooks/              # 自定义 Hooks
 │   ├── lib/                # 工具库
 │   │   └── utils.ts        # 通用工具函数 (cn)
+│   ├── storage/database/   # 数据库
+│   │   ├── supabase-client.ts  # Supabase 客户端
+│   │   └── shared/schema.ts    # 数据表定义
 │   └── server.ts           # 自定义服务端入口
 ├── next.config.ts          # Next.js 配置
 ├── package.json            # 项目依赖管理
 └── tsconfig.json           # TypeScript 配置
 ```
+
+## 数据表
+
+- `daily_diagnose_data`: AI 诊断记录表
+  - `id` (serial PK), `diagnose_time` (timestamptz), `image_url` (text), `diagnosis_result` (text), `status` (varchar: normal/abnormal), `created_at` (timestamptz)
+
+## API 接口
+
+| 路径 | 方法 | 说明 |
+|------|------|------|
+| `/api/dashboard` | GET | 获取今日统计（总数/异常/正常） |
+| `/api/history?date=YYYY-MM-DD` | GET | 按日期查询诊断记录 |
+| `/api/reports` | GET | 获取近7天报告列表 |
+| `/api/reports/generate` | POST | 触发工作流生成 Excel 报告 |
+
+## 工作流集成
+
+- 报告生成使用扣子工作流 `To_excel_3` (ID: 7660403800638029824)
+- 输入参数: `input_json` (string) - 诊断数据 JSON
+- 输出: `URL` (下载链接), `file_name`, `abnormal_count`
 
 - 项目文件（如 app 目录、pages 目录、components 等）默认初始化到 `src/` 目录下。
 
