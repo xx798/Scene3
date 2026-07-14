@@ -5,34 +5,22 @@
 
 import cron from "node-cron";
 import { getSupabaseClient } from "@/storage/database/supabase-client";
-import { executeScheduledTask } from "@/lib/bot-caller";
+import { executeScheduledTask, resolveTemplate } from "@/lib/bot-caller";
 
 interface TaskConfig {
   id: number;
   name: string;
-  bot_id: string;
+  task_type: string;
+  bot_id: string | null;
+  workflow_id: string | null;
   cron_expression: string;
   prompt_template: string;
+  workflow_parameters: string;
   is_active: boolean;
 }
 
 // 存储活跃的 cron job 实例
 const activeJobs = new Map<number, ReturnType<typeof cron.schedule>>();
-
-/**
- * 计算下一次执行时间（简化版，用于展示）
- */
-function getNextRun(cronExpr: string): string | null {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const job = cron.schedule(cronExpr, () => {}, { scheduled: false } as any);
-    // node-cron 没有直接暴露 next run，用简单方式估算
-    job.stop();
-    return new Date(Date.now() + 60000).toISOString();
-  } catch {
-    return null;
-  }
-}
 
 /**
  * 启动单个任务
@@ -48,16 +36,20 @@ function startTask(task: TaskConfig): void {
   }
 
   const job = cron.schedule(task.cron_expression, async () => {
-    console.log(`[Scheduler] 触发任务 ${task.id}: ${task.name}`);
+    console.log(`[Scheduler] 触发任务 ${task.id}: ${task.name} (${task.task_type})`);
 
-    // 解析 prompt 模板中的变量
-    let prompt = task.prompt_template;
-    const now = new Date();
-    prompt = prompt.replace(/\{\{now\}\}/g, now.toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" }));
-    prompt = prompt.replace(/\{\{date\}\}/g, now.toISOString().split("T")[0]);
-    prompt = prompt.replace(/\{\{timestamp\}\}/g, String(Date.now()));
+    // 解析模板中的变量
+    const prompt = resolveTemplate(task.prompt_template);
+    const workflowParams = resolveTemplate(task.workflow_parameters);
 
-    await executeScheduledTask(task.id, task.bot_id, prompt);
+    await executeScheduledTask(
+      task.id,
+      task.task_type,
+      task.bot_id,
+      task.workflow_id,
+      prompt,
+      workflowParams
+    );
   }, {
     timezone: "Asia/Shanghai",
   });
@@ -87,7 +79,7 @@ export async function initScheduler(): Promise<void> {
   const client = getSupabaseClient();
   const { data: tasks, error } = await client
     .from("scheduled_tasks")
-    .select("id, name, bot_id, cron_expression, prompt_template, is_active");
+    .select("id, name, task_type, bot_id, workflow_id, cron_expression, prompt_template, workflow_parameters, is_active");
 
   if (error) {
     console.error(`[Scheduler] 加载任务失败: ${error.message}`);

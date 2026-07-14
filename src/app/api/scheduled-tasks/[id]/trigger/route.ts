@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseClient } from "@/storage/database/supabase-client";
-import { executeScheduledTask } from "@/lib/bot-caller";
+import { executeScheduledTask, resolveTemplate } from "@/lib/bot-caller";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +22,7 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
     const client = getSupabaseClient();
     const { data: task, error } = await client
       .from("scheduled_tasks")
-      .select("id, bot_id, prompt_template, name")
+      .select("id, task_type, bot_id, workflow_id, prompt_template, workflow_parameters, name")
       .eq("id", taskId)
       .maybeSingle();
 
@@ -31,26 +31,35 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: "任务不存在" }, { status: 404 });
     }
 
-    // Resolve prompt template
-    let prompt = (task as { prompt_template: string }).prompt_template;
-    const now = new Date();
-    prompt = prompt.replace(/\{\{now\}\}/g, now.toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" }));
-    prompt = prompt.replace(/\{\{date\}\}/g, now.toISOString().split("T")[0]);
-    prompt = prompt.replace(/\{\{timestamp\}\}/g, String(Date.now()));
+    const t = task as {
+      id: number;
+      task_type: string;
+      bot_id: string | null;
+      workflow_id: string | null;
+      prompt_template: string;
+      workflow_parameters: string;
+      name: string;
+    };
 
-    // Execute asynchronously - don't wait for completion
-    // But we return immediately with a status
+    // Resolve template variables
+    const prompt = resolveTemplate(t.prompt_template);
+    const workflowParams = resolveTemplate(t.workflow_parameters);
+
+    // Execute asynchronously
     executeScheduledTask(
-      taskId,
-      (task as { bot_id: string }).bot_id,
-      prompt
+      t.id,
+      t.task_type,
+      t.bot_id,
+      t.workflow_id,
+      prompt,
+      workflowParams
     ).catch((err: unknown) => {
       console.error(`[Trigger] 手动触发任务 ${taskId} 失败:`, err);
     });
 
     return NextResponse.json({
       success: true,
-      message: `任务 "${(task as { name: string }).name}" 已触发，正在后台执行`,
+      message: `任务 "${t.name}" (${t.task_type}) 已触发，正在后台执行`,
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "未知错误";

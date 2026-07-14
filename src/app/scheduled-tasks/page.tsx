@@ -6,7 +6,6 @@ import {
   Plus,
   Play,
   Trash2,
-  RefreshCw,
   CheckCircle2,
   XCircle,
   Loader2,
@@ -15,6 +14,8 @@ import {
   ChevronUp,
   Pause,
   AlertCircle,
+  Bot,
+  Workflow,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -22,9 +23,12 @@ import { cn } from '@/lib/utils';
 interface ScheduledTask {
   id: number;
   name: string;
-  bot_id: string;
+  task_type: string;
+  bot_id: string | null;
+  workflow_id: string | null;
   cron_expression: string;
   prompt_template: string;
+  workflow_parameters: string;
   is_active: boolean;
   last_run_at: string | null;
   created_at: string;
@@ -149,9 +153,12 @@ export default function ScheduledTasksPage() {
 
   const handleSave = async (data: {
     name: string;
+    task_type: string;
     bot_id: string;
+    workflow_id: string;
     cron_expression: string;
     prompt_template: string;
+    workflow_parameters: string;
   }) => {
     try {
       const isEdit = !!editingTask;
@@ -185,7 +192,7 @@ export default function ScheduledTasksPage() {
         <div>
           <h1 className="text-xl font-semibold text-foreground">定时任务</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            配置定时调用智能体，自动执行诊断并接收返回结果
+            配置定时调用智能体或工作流，自动执行并接收返回结果
           </p>
         </div>
         <button
@@ -276,6 +283,8 @@ function TaskCard({
   onToggleLogs: () => void;
 }) {
   const presetLabel = CRON_PRESETS.find((p) => p.value === task.cron_expression)?.label;
+  const isWorkflow = task.task_type === 'workflow';
+  const targetId = isWorkflow ? task.workflow_id : task.bot_id;
 
   return (
     <div className="rounded-xl border border-border bg-white shadow-sm transition-all duration-200 hover:shadow-md">
@@ -301,6 +310,17 @@ function TaskCard({
             <h3 className="truncate text-sm font-semibold text-foreground">{task.name}</h3>
             <span
               className={cn(
+                'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium',
+                isWorkflow
+                  ? 'bg-violet-50 text-violet-600'
+                  : 'bg-sky-50 text-sky-600'
+              )}
+            >
+              {isWorkflow ? <Workflow className="h-3 w-3" /> : <Bot className="h-3 w-3" />}
+              {isWorkflow ? '工作流' : '智能体'}
+            </span>
+            <span
+              className={cn(
                 'inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium',
                 task.is_active
                   ? 'bg-emerald-50 text-emerald-600'
@@ -311,11 +331,9 @@ function TaskCard({
             </span>
           </div>
           <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
-            <span>Bot ID: {task.bot_id}</span>
+            <span>{isWorkflow ? 'Workflow' : 'Bot'} ID: {targetId || '-'}</span>
             <span className="text-border">|</span>
-            <span>
-              {presetLabel ? `${presetLabel}` : task.cron_expression}
-            </span>
+            <span>{presetLabel || task.cron_expression}</span>
             {task.last_run_at && (
               <>
                 <span className="text-border">|</span>
@@ -438,7 +456,7 @@ function LogRow({ log }: { log: ExecutionLog }) {
         <div className="mt-2 space-y-2 border-t border-border pt-2">
           {log.prompt_sent && (
             <div>
-              <p className="text-[11px] font-medium text-muted-foreground">发送内容</p>
+              <p className="text-[11px] font-medium text-muted-foreground">发送内容 / 参数</p>
               <p className="mt-0.5 rounded bg-slate-50 p-2 text-xs text-foreground whitespace-pre-wrap">
                 {log.prompt_sent}
               </p>
@@ -479,10 +497,22 @@ function TaskFormModal({
 }: {
   task: ScheduledTask | null;
   onClose: () => void;
-  onSave: (data: { name: string; bot_id: string; cron_expression: string; prompt_template: string }) => void;
+  onSave: (data: {
+    name: string;
+    task_type: string;
+    bot_id: string;
+    workflow_id: string;
+    cron_expression: string;
+    prompt_template: string;
+    workflow_parameters: string;
+  }) => void;
 }) {
+  const [taskType, setTaskType] = useState<'bot' | 'workflow'>(
+    (task?.task_type as 'bot' | 'workflow') || 'bot'
+  );
   const [name, setName] = useState(task?.name || '');
   const [botId, setBotId] = useState(task?.bot_id || '');
+  const [workflowId, setWorkflowId] = useState(task?.workflow_id || '');
   const [cronPreset, setCronPreset] = useState(
     CRON_PRESETS.find((p) => p.value === task?.cron_expression)?.value !== undefined
       ? task?.cron_expression || ''
@@ -492,22 +522,49 @@ function TaskFormModal({
     !CRON_PRESETS.find((p) => p.value === task?.cron_expression) ? task?.cron_expression || '' : ''
   );
   const [prompt, setPrompt] = useState(task?.prompt_template || '');
+  const [workflowParams, setWorkflowParams] = useState(task?.workflow_parameters || '');
   const [saving, setSaving] = useState(false);
 
   const isCustomCron = cronPreset === '';
   const finalCron = isCustomCron ? customCron : cronPreset;
 
   const handleSubmit = async () => {
-    if (!name.trim() || !botId.trim() || !finalCron.trim()) {
-      alert('请填写任务名称、Bot ID 和调度时间');
+    if (!name.trim()) {
+      alert('请填写任务名称');
       return;
     }
+    if (taskType === 'bot' && !botId.trim()) {
+      alert('请填写 Bot ID');
+      return;
+    }
+    if (taskType === 'workflow' && !workflowId.trim()) {
+      alert('请填写 Workflow ID');
+      return;
+    }
+    if (!finalCron.trim()) {
+      alert('请配置执行频率');
+      return;
+    }
+
+    // Validate workflow params JSON if provided
+    if (taskType === 'workflow' && workflowParams.trim()) {
+      try {
+        JSON.parse(workflowParams);
+      } catch {
+        alert('工作流参数必须是有效的 JSON 格式');
+        return;
+      }
+    }
+
     setSaving(true);
     await onSave({
       name: name.trim(),
-      bot_id: botId.trim(),
+      task_type: taskType,
+      bot_id: taskType === 'bot' ? botId.trim() : '',
+      workflow_id: taskType === 'workflow' ? workflowId.trim() : '',
       cron_expression: finalCron.trim(),
       prompt_template: prompt,
+      workflow_parameters: workflowParams,
     });
     setSaving(false);
   };
@@ -527,6 +584,61 @@ function TaskFormModal({
 
         {/* Body */}
         <div className="space-y-4 px-6 py-5">
+          {/* Task type selector */}
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-foreground">
+              任务类型 <span className="text-rose-500">*</span>
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setTaskType('bot')}
+                className={cn(
+                  'flex items-center gap-2.5 rounded-lg border-2 px-4 py-3 text-left transition-all',
+                  taskType === 'bot'
+                    ? 'border-sky-500 bg-sky-50'
+                    : 'border-border hover:border-slate-300'
+                )}
+              >
+                <div className={cn(
+                  'flex h-8 w-8 items-center justify-center rounded-lg',
+                  taskType === 'bot' ? 'bg-sky-100' : 'bg-slate-100'
+                )}>
+                  <Bot className={cn('h-4 w-4', taskType === 'bot' ? 'text-sky-600' : 'text-slate-500')} />
+                </div>
+                <div>
+                  <p className={cn('text-sm font-medium', taskType === 'bot' ? 'text-sky-700' : 'text-foreground')}>
+                    智能体
+                  </p>
+                  <p className="text-[11px] text-muted-foreground">调用 Bot 对话</p>
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setTaskType('workflow')}
+                className={cn(
+                  'flex items-center gap-2.5 rounded-lg border-2 px-4 py-3 text-left transition-all',
+                  taskType === 'workflow'
+                    ? 'border-violet-500 bg-violet-50'
+                    : 'border-border hover:border-slate-300'
+                )}
+              >
+                <div className={cn(
+                  'flex h-8 w-8 items-center justify-center rounded-lg',
+                  taskType === 'workflow' ? 'bg-violet-100' : 'bg-slate-100'
+                )}>
+                  <Workflow className={cn('h-4 w-4', taskType === 'workflow' ? 'text-violet-600' : 'text-slate-500')} />
+                </div>
+                <div>
+                  <p className={cn('text-sm font-medium', taskType === 'workflow' ? 'text-violet-700' : 'text-foreground')}>
+                    工作流
+                  </p>
+                  <p className="text-[11px] text-muted-foreground">执行 Workflow</p>
+                </div>
+              </button>
+            </div>
+          </div>
+
           {/* Task name */}
           <div>
             <label className="mb-1.5 block text-sm font-medium text-foreground">
@@ -541,22 +653,40 @@ function TaskFormModal({
             />
           </div>
 
-          {/* Bot ID */}
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-foreground">
-              Bot ID <span className="text-rose-500">*</span>
-            </label>
-            <input
-              type="text"
-              value={botId}
-              onChange={(e) => setBotId(e.target.value)}
-              placeholder="扣子智能体 ID（URL 中的数字）"
-              className="w-full rounded-lg border border-border px-3 py-2 text-sm text-foreground placeholder:text-slate-400 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
-            />
-            <p className="mt-1 text-[11px] text-muted-foreground">
-              在扣子平台打开智能体，URL 末尾的数字即为 Bot ID
-            </p>
-          </div>
+          {/* Bot ID or Workflow ID */}
+          {taskType === 'bot' ? (
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-foreground">
+                Bot ID <span className="text-rose-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={botId}
+                onChange={(e) => setBotId(e.target.value)}
+                placeholder="扣子智能体 ID（URL 中的数字）"
+                className="w-full rounded-lg border border-border px-3 py-2 text-sm text-foreground placeholder:text-slate-400 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+              />
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                在扣子平台打开智能体，URL 末尾的数字即为 Bot ID
+              </p>
+            </div>
+          ) : (
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-foreground">
+                Workflow ID <span className="text-rose-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={workflowId}
+                onChange={(e) => setWorkflowId(e.target.value)}
+                placeholder="扣子工作流 ID（URL 中的数字）"
+                className="w-full rounded-lg border border-border px-3 py-2 text-sm text-foreground placeholder:text-slate-400 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+              />
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                在扣子平台打开工作流，URL 末尾的数字即为 Workflow ID
+              </p>
+            </div>
+          )}
 
           {/* Cron schedule */}
           <div>
@@ -585,23 +715,50 @@ function TaskFormModal({
             )}
           </div>
 
-          {/* Prompt template */}
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-foreground">
-              Prompt 模板
-            </label>
-            <textarea
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              placeholder="发送给智能体的消息内容。支持变量：&#10;{{now}} - 当前时间&#10;{{date}} - 当前日期&#10;{{timestamp}} - 时间戳"
-              rows={4}
-              className="w-full resize-none rounded-lg border border-border px-3 py-2 text-sm text-foreground placeholder:text-slate-400 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
-            />
-            <div className="mt-1.5 flex items-start gap-1.5">
-              <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-sky-500" />
-              <p className="text-[11px] text-muted-foreground">
-                留空则发送空消息。支持变量替换：{'{{now}}'} 当前时间、{'{{date}}'} 当前日期、{'{{timestamp}}'} 时间戳
-              </p>
+          {/* Bot: Prompt template */}
+          {taskType === 'bot' && (
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-foreground">
+                Prompt 模板
+              </label>
+              <textarea
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                placeholder="发送给智能体的消息内容。支持变量：&#10;{{now}} - 当前时间&#10;{{date}} - 当前日期&#10;{{timestamp}} - 时间戳"
+                rows={3}
+                className="w-full resize-none rounded-lg border border-border px-3 py-2 text-sm text-foreground placeholder:text-slate-400 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+              />
+            </div>
+          )}
+
+          {/* Workflow: Parameters JSON */}
+          {taskType === 'workflow' && (
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-foreground">
+                工作流参数 (JSON)
+              </label>
+              <textarea
+                value={workflowParams}
+                onChange={(e) => setWorkflowParams(e.target.value)}
+                placeholder='{"input": "hello", "key": "{{date}}"}'
+                rows={4}
+                className="w-full resize-none rounded-lg border border-border px-3 py-2 font-mono text-sm text-foreground placeholder:text-slate-400 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+              />
+              <div className="mt-1.5 flex items-start gap-1.5">
+                <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-violet-500" />
+                <p className="text-[11px] text-muted-foreground">
+                  填写工作流的输入参数，JSON 格式。同样支持 {'{{now}}'}、{'{{date}}'}、{'{{timestamp}}'} 变量
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Common: variable hints */}
+          <div className="flex items-start gap-1.5 rounded-lg bg-slate-50 p-3">
+            <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-sky-500" />
+            <div className="text-[11px] text-muted-foreground">
+              <p className="font-medium text-foreground">可用变量（自动替换）</p>
+              <p>{'{{now}}'} = 当前时间 | {'{{date}}'} = 当前日期 | {'{{timestamp}}'} = 时间戳</p>
             </div>
           </div>
         </div>
@@ -617,7 +774,12 @@ function TaskFormModal({
           <button
             onClick={handleSubmit}
             disabled={saving}
-            className="inline-flex items-center gap-2 rounded-lg bg-sky-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-sky-600 disabled:opacity-50"
+            className={cn(
+              'inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white transition-colors disabled:opacity-50',
+              taskType === 'workflow'
+                ? 'bg-violet-500 hover:bg-violet-600'
+                : 'bg-sky-500 hover:bg-sky-600'
+            )}
           >
             {saving && <Loader2 className="h-4 w-4 animate-spin" />}
             {task ? '保存修改' : '创建任务'}

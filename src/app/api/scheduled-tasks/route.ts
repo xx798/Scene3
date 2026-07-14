@@ -30,16 +30,41 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { name, bot_id, cron_expression, prompt_template } = body as {
+    const {
+      name,
+      task_type = "bot",
+      bot_id,
+      workflow_id,
+      cron_expression,
+      prompt_template,
+      workflow_parameters,
+    } = body as {
       name?: string;
+      task_type?: string;
       bot_id?: string;
+      workflow_id?: string;
       cron_expression?: string;
       prompt_template?: string;
+      workflow_parameters?: string;
     };
 
-    if (!name || !bot_id || !cron_expression) {
+    if (!name || !cron_expression) {
       return NextResponse.json(
-        { error: "缺少必填字段: name, bot_id, cron_expression" },
+        { error: "缺少必填字段: name, cron_expression" },
+        { status: 400 }
+      );
+    }
+
+    // Validate task_type specific requirements
+    if (task_type === "bot" && !bot_id) {
+      return NextResponse.json(
+        { error: "智能体任务必须提供 bot_id" },
+        { status: 400 }
+      );
+    }
+    if (task_type === "workflow" && !workflow_id) {
+      return NextResponse.json(
+        { error: "工作流任务必须提供 workflow_id" },
         { status: 400 }
       );
     }
@@ -58,9 +83,12 @@ export async function POST(request: NextRequest) {
       .from("scheduled_tasks")
       .insert({
         name,
-        bot_id,
+        task_type,
+        bot_id: task_type === "bot" ? bot_id : null,
+        workflow_id: task_type === "workflow" ? workflow_id : null,
         cron_expression,
         prompt_template: prompt_template || "",
+        workflow_parameters: workflow_parameters || "",
         is_active: true,
       })
       .select()

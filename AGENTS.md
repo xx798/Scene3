@@ -60,8 +60,12 @@
   - `status` (varchar: normal/abnormal) - 综合状态
   - `created_at` (timestamptz)
 - `scheduled_tasks`: 定时任务配置表
-  - `id` (serial PK), `name` (varchar), `bot_id` (varchar), `cron_expression` (varchar)
-  - `prompt_template` (text) - 发送给智能体的消息模板，支持 `{{now}}`/`{{date}}`/`{{timestamp}}` 变量
+  - `id` (serial PK), `name` (varchar), `task_type` (varchar: bot/workflow)
+  - `bot_id` (varchar, nullable) - 智能体任务时填写
+  - `workflow_id` (varchar, nullable) - 工作流任务时填写
+  - `cron_expression` (varchar)
+  - `prompt_template` (text) - 智能体消息模板，支持 `{{now}}`/`{{date}}`/`{{timestamp}}` 变量
+  - `workflow_parameters` (text) - 工作流输入参数 JSON 模板，支持同样变量
   - `is_active` (boolean), `last_run_at` (timestamptz), `created_at`, `updated_at`
 - `task_execution_logs`: 任务执行日志表
   - `id` (serial PK), `task_id` (int FK), `status` (varchar: running/success/failed)

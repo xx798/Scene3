@@ -1,6 +1,7 @@
 /**
- * Bot Caller - 调用扣子平台智能体并解析返回内容
- * 基于 Coze Open API v3/chat 实现
+ * Bot & Workflow Caller - 调用扣子平台智能体/工作流并解析返回内容
+ * Bot: 基于 Coze Open API v3/chat
+ * Workflow: 基于 Coze Open API v1/workflow/run
  */
 
 import { getSupabaseClient } from "@/storage/database/supabase-client";
@@ -8,7 +9,7 @@ import { getSupabaseClient } from "@/storage/database/supabase-client";
 const COZE_API_TOKEN = process.env.COZE_WORKLOAD_API_TOKEN;
 const COZE_API_BASE = process.env.COZE_API_BASE_URL || "https://api.coze.cn";
 
-interface BotChatResult {
+interface CallResult {
   success: boolean;
   conversationId?: string;
   chatId?: string;
@@ -36,9 +37,21 @@ function buildHeaders(): Record<string, string> {
 }
 
 /**
+ * 替换模板中的变量
+ */
+export function resolveTemplate(template: string): string {
+  const now = new Date();
+  let result = template;
+  result = result.replace(/\{\{now\}\}/g, now.toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" }));
+  result = result.replace(/\{\{date\}\}/g, now.toISOString().split("T")[0]);
+  result = result.replace(/\{\{timestamp\}\}/g, String(Date.now()));
+  return result;
+}
+
+/**
  * 调用智能体进行同步对话（自动轮询等待完成）
  */
-export async function callBot(botId: string, message: string): Promise<BotChatResult> {
+async function callBot(botId: string, message: string): Promise<CallResult> {
   const headers = buildHeaders();
 
   try {
@@ -144,9 +157,70 @@ export async function callBot(botId: string, message: string): Promise<BotChatRe
 }
 
 /**
- * 执行一次定时任务：调用 Bot → 记录日志 → 可选入库
+ * 调用工作流（同步执行，等待完成后返回结果）
  */
-export async function executeScheduledTask(taskId: number, botId: string, prompt: string): Promise<void> {
+async function callWorkflow(workflowId: string, parametersJson: string): Promise<CallResult> {
+  const headers = buildHeaders();
+
+  try {
+    // Parse parameters template
+    let parameters: Record<string, unknown> = {};
+    if (parametersJson.trim()) {
+      const resolved = resolveTemplate(parametersJson);
+      try {
+        parameters = JSON.parse(resolved);
+      } catch {
+        return { success: false, error: `工作流参数 JSON 解析失败: ${resolved}` };
+      }
+    }
+
+    const response = await fetch(`${COZE_API_BASE}/v1/workflow/run`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        workflow_id: workflowId,
+        parameters,
+      }),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      return { success: false, error: `工作流调用失败: ${response.status} ${errText}` };
+    }
+
+    const result = await response.json();
+
+    // Extract output content
+    let content = "";
+    if (result.data) {
+      if (typeof result.data === "string") {
+        content = result.data;
+      } else {
+        content = JSON.stringify(result.data, null, 2);
+      }
+    }
+
+    return {
+      success: true,
+      content,
+    };
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    return { success: false, error: `工作流调用异常: ${errMsg}` };
+  }
+}
+
+/**
+ * 执行一次定时任务：根据 task_type 调用 Bot 或 Workflow → 记录日志
+ */
+export async function executeScheduledTask(
+  taskId: number,
+  taskType: string,
+  botId: string | null,
+  workflowId: string | null,
+  prompt: string,
+  workflowParameters: string
+): Promise<void> {
   const client = getSupabaseClient();
 
   // Create execution log
@@ -155,7 +229,7 @@ export async function executeScheduledTask(taskId: number, botId: string, prompt
     .insert({
       task_id: taskId,
       status: "running",
-      prompt_sent: prompt,
+      prompt_sent: taskType === "workflow" ? workflowParameters : prompt,
       started_at: new Date().toISOString(),
     })
     .select("id")
@@ -169,13 +243,23 @@ export async function executeScheduledTask(taskId: number, botId: string, prompt
   const logId = logRow.id as number;
 
   try {
-    // Call the bot
-    const result = await callBot(botId, prompt);
+    let result: CallResult;
+
+    if (taskType === "workflow") {
+      if (!workflowId) {
+        throw new Error("工作流任务缺少 workflow_id");
+      }
+      result = await callWorkflow(workflowId, workflowParameters);
+    } else {
+      if (!botId) {
+        throw new Error("智能体任务缺少 bot_id");
+      }
+      result = await callBot(botId, prompt);
+    }
 
     const completedAt = new Date().toISOString();
 
     if (result.success) {
-      // Update log with success
       await client
         .from("task_execution_logs")
         .update({
@@ -185,15 +269,13 @@ export async function executeScheduledTask(taskId: number, botId: string, prompt
         })
         .eq("id", logId);
 
-      // Update task last_run_at
       await client
         .from("scheduled_tasks")
         .update({ last_run_at: completedAt })
         .eq("id", taskId);
 
-      console.log(`[Scheduler] 任务 ${taskId} 执行成功, logId=${logId}`);
+      console.log(`[Scheduler] 任务 ${taskId} (${taskType}) 执行成功, logId=${logId}`);
     } else {
-      // Update log with failure
       await client
         .from("task_execution_logs")
         .update({
@@ -203,7 +285,7 @@ export async function executeScheduledTask(taskId: number, botId: string, prompt
         })
         .eq("id", logId);
 
-      console.error(`[Scheduler] 任务 ${taskId} 执行失败: ${result.error}`);
+      console.error(`[Scheduler] 任务 ${taskId} (${taskType}) 执行失败: ${result.error}`);
     }
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
@@ -216,6 +298,6 @@ export async function executeScheduledTask(taskId: number, botId: string, prompt
       })
       .eq("id", logId);
 
-    console.error(`[Scheduler] 任务 ${taskId} 执行异常: ${errMsg}`);
+    console.error(`[Scheduler] 任务 ${taskId} (${taskType}) 执行异常: ${errMsg}`);
   }
 }

@@ -35,9 +35,12 @@ export const scheduledTasks = pgTable(
 	{
 		id: serial().primaryKey(),
 		name: varchar("name", { length: 255 }).notNull(),
-		bot_id: varchar("bot_id", { length: 255 }).notNull(),
+		task_type: varchar("task_type", { length: 20 }).notNull().default("bot"),
+		bot_id: varchar("bot_id", { length: 255 }),
+		workflow_id: varchar("workflow_id", { length: 255 }),
 		cron_expression: varchar("cron_expression", { length: 100 }).notNull(),
 		prompt_template: text("prompt_template").notNull().default(""),
+		workflow_parameters: text("workflow_parameters").notNull().default(""),
 		is_active: boolean("is_active").notNull().default(true),
 		last_run_at: timestamp("last_run_at", { withTimezone: true }),
 		next_run_at: timestamp("next_run_at", { withTimezone: true }),

@@ -50,11 +50,23 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     }
 
     const body = await request.json();
-    const { name, bot_id, cron_expression, prompt_template, is_active } = body as {
+    const {
+      name,
+      task_type,
+      bot_id,
+      workflow_id,
+      cron_expression,
+      prompt_template,
+      workflow_parameters,
+      is_active,
+    } = body as {
       name?: string;
+      task_type?: string;
       bot_id?: string;
+      workflow_id?: string;
       cron_expression?: string;
       prompt_template?: string;
+      workflow_parameters?: string;
       is_active?: boolean;
     };
 
@@ -71,9 +83,12 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
     const updateData: Record<string, unknown> = { updated_at: new Date().toISOString() };
     if (name !== undefined) updateData.name = name;
+    if (task_type !== undefined) updateData.task_type = task_type;
     if (bot_id !== undefined) updateData.bot_id = bot_id;
+    if (workflow_id !== undefined) updateData.workflow_id = workflow_id;
     if (cron_expression !== undefined) updateData.cron_expression = cron_expression;
     if (prompt_template !== undefined) updateData.prompt_template = prompt_template;
+    if (workflow_parameters !== undefined) updateData.workflow_parameters = workflow_parameters;
     if (is_active !== undefined) updateData.is_active = is_active;
 
     const client = getSupabaseClient();
