@@ -1,791 +1,521 @@
-'use client';
+"use client"
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback } from "react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Badge } from "@/components/ui/badge"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
 import {
   Clock,
   Plus,
   Play,
   Trash2,
+  Edit,
+  FileText,
   CheckCircle2,
   XCircle,
   Loader2,
-  History,
-  ChevronDown,
-  ChevronUp,
-  Pause,
-  AlertCircle,
-  Bot,
-  Workflow,
-} from 'lucide-react';
-import { cn } from '@/lib/utils';
+  Calendar,
+} from "lucide-react"
 
-/* ─── Types ─── */
 interface ScheduledTask {
-  id: number;
-  name: string;
-  task_type: string;
-  bot_id: string | null;
-  workflow_id: string | null;
-  cron_expression: string;
-  prompt_template: string;
-  workflow_parameters: string;
-  is_active: boolean;
-  last_run_at: string | null;
-  created_at: string;
+  id: number
+  name: string
+  task_type: string
+  bot_id: string | null
+  workflow_id: string | null
+  cron_expression: string
+  prompt_template: string
+  workflow_parameters: string
+  is_active: boolean
+  last_run_at: string | null
+  created_at: string
+  updated_at: string
 }
 
-interface ExecutionLog {
-  id: number;
-  task_id: number;
-  status: string;
-  prompt_sent: string | null;
-  response_content: string | null;
-  error_message: string | null;
-  started_at: string;
-  completed_at: string | null;
+interface TaskLog {
+  id: number
+  task_id: number
+  status: string
+  prompt_sent: string | null
+  response_content: string | null
+  error_message: string | null
+  started_at: string
+  completed_at: string | null
 }
 
-/* ─── Cron presets ─── */
-const CRON_PRESETS = [
-  { label: '每 5 分钟', value: '*/5 * * * *' },
-  { label: '每 15 分钟', value: '*/15 * * * *' },
-  { label: '每 30 分钟', value: '*/30 * * * *' },
-  { label: '每小时', value: '0 * * * *' },
-  { label: '每 2 小时', value: '0 */2 * * *' },
-  { label: '每 6 小时', value: '0 */6 * * *' },
-  { label: '每天 08:00', value: '0 8 * * *' },
-  { label: '每天 12:00', value: '0 12 * * *' },
-  { label: '每天 18:00', value: '0 18 * * *' },
-  { label: '工作日 09:00', value: '0 9 * * 1-5' },
-  { label: '自定义', value: '' },
-];
-
-/* ─── Main Page ─── */
 export default function ScheduledTasksPage() {
-  const [tasks, setTasks] = useState<ScheduledTask[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
-  const [editingTask, setEditingTask] = useState<ScheduledTask | null>(null);
-  const [expandedLogs, setExpandedLogs] = useState<number | null>(null);
-  const [logs, setLogs] = useState<ExecutionLog[]>([]);
-  const [logsLoading, setLogsLoading] = useState(false);
-  const [triggering, setTriggering] = useState<number | null>(null);
+  const [tasks, setTasks] = useState<ScheduledTask[]>([])
+  const [loading, setLoading] = useState(true)
+  const [createOpen, setCreateOpen] = useState(false)
+  const [editTask, setEditTask] = useState<ScheduledTask | null>(null)
+  const [logsOpen, setLogsOpen] = useState(false)
+  const [logsTaskId, setLogsTaskId] = useState<number | null>(null)
+  const [logs, setLogs] = useState<TaskLog[]>([])
+  const [logsLoading, setLogsLoading] = useState(false)
+  const [triggering, setTriggering] = useState<number | null>(null)
+
+  // 表单状态
+  const [formName, setFormName] = useState("")
+  const [formType, setFormType] = useState("bot")
+  const [formBotId, setFormBotId] = useState("")
+  const [formWorkflowId, setFormWorkflowId] = useState("")
+  const [formCron, setFormCron] = useState("")
+  const [formPrompt, setFormPrompt] = useState("")
+  const [formWorkflowParams, setFormWorkflowParams] = useState("")
 
   const fetchTasks = useCallback(async () => {
     try {
-      const res = await fetch('/api/scheduled-tasks');
-      const json = await res.json();
-      if (json.success) setTasks(json.data);
-    } catch (err) {
-      console.error('获取任务列表失败:', err);
+      const res = await fetch("/api/scheduled-tasks")
+      const data = await res.json()
+      setTasks(Array.isArray(data) ? data : [])
+    } catch {
+      setTasks([])
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  }, []);
+  }, [])
 
   useEffect(() => {
-    fetchTasks();
-  }, [fetchTasks]);
+    fetchTasks()
+  }, [fetchTasks])
 
-  const fetchLogs = useCallback(async (taskId: number) => {
-    setLogsLoading(true);
+  const fetchLogs = async (taskId: number) => {
+    setLogsTaskId(taskId)
+    setLogsOpen(true)
+    setLogsLoading(true)
     try {
-      const res = await fetch(`/api/scheduled-tasks/${taskId}/logs?limit=20`);
-      const json = await res.json();
-      if (json.success) setLogs(json.data);
-    } catch (err) {
-      console.error('获取日志失败:', err);
+      const res = await fetch(`/api/scheduled-tasks/${taskId}/logs?limit=20`)
+      const data = await res.json()
+      setLogs(Array.isArray(data) ? data : [])
+    } catch {
+      setLogs([])
     } finally {
-      setLogsLoading(false);
+      setLogsLoading(false)
     }
-  }, []);
+  }
 
-  const toggleLogs = (taskId: number) => {
-    if (expandedLogs === taskId) {
-      setExpandedLogs(null);
-    } else {
-      setExpandedLogs(taskId);
-      fetchLogs(taskId);
+  const resetForm = () => {
+    setFormName("")
+    setFormType("bot")
+    setFormBotId("")
+    setFormWorkflowId("")
+    setFormCron("")
+    setFormPrompt("")
+    setFormWorkflowParams("")
+  }
+
+  const openCreate = () => {
+    resetForm()
+    setEditTask(null)
+    setCreateOpen(true)
+  }
+
+  const openEdit = (task: ScheduledTask) => {
+    setFormName(task.name)
+    setFormType(task.task_type)
+    setFormBotId(task.bot_id || "")
+    setFormWorkflowId(task.workflow_id || "")
+    setFormCron(task.cron_expression)
+    setFormPrompt(task.prompt_template || "")
+    setFormWorkflowParams(task.workflow_parameters || "")
+    setEditTask(task)
+    setCreateOpen(true)
+  }
+
+  const handleSave = async () => {
+    if (!formName || !formCron) return
+
+    const payload = {
+      name: formName,
+      task_type: formType,
+      bot_id: formType === "bot" ? formBotId : null,
+      workflow_id: formType === "workflow" ? formWorkflowId : null,
+      cron_expression: formCron,
+      prompt_template: formPrompt,
+      workflow_parameters: formWorkflowParams,
+      is_active: true,
     }
-  };
 
-  const handleTrigger = async (taskId: number) => {
-    setTriggering(taskId);
     try {
-      const res = await fetch(`/api/scheduled-tasks/${taskId}/trigger`, { method: 'POST' });
-      const json = await res.json();
-      if (!json.success) alert(json.error || '触发失败');
-    } catch {
-      alert('触发请求失败');
-    } finally {
-      setTriggering(null);
-    }
-  };
-
-  const handleDelete = async (taskId: number) => {
-    if (!confirm('确定删除此定时任务？删除后不可恢复。')) return;
-    try {
-      const res = await fetch(`/api/scheduled-tasks/${taskId}`, { method: 'DELETE' });
-      const json = await res.json();
-      if (json.success) {
-        setTasks((prev) => prev.filter((t) => t.id !== taskId));
-      }
-    } catch {
-      alert('删除失败');
-    }
-  };
-
-  const handleToggleActive = async (task: ScheduledTask) => {
-    try {
-      const res = await fetch(`/api/scheduled-tasks/${task.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ is_active: !task.is_active }),
-      });
-      const json = await res.json();
-      if (json.success) {
-        setTasks((prev) => prev.map((t) => (t.id === task.id ? json.data : t)));
-      }
-    } catch {
-      alert('操作失败');
-    }
-  };
-
-  const handleSave = async (data: {
-    name: string;
-    task_type: string;
-    bot_id: string;
-    workflow_id: string;
-    cron_expression: string;
-    prompt_template: string;
-    workflow_parameters: string;
-  }) => {
-    try {
-      const isEdit = !!editingTask;
-      const url = isEdit
-        ? `/api/scheduled-tasks/${editingTask.id}`
-        : '/api/scheduled-tasks';
-      const method = isEdit ? 'PUT' : 'POST';
-
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      });
-      const json = await res.json();
-      if (json.success) {
-        setShowForm(false);
-        setEditingTask(null);
-        fetchTasks();
+      if (editTask) {
+        await fetch(`/api/scheduled-tasks/${editTask.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        })
       } else {
-        alert(json.error || '保存失败');
+        await fetch("/api/scheduled-tasks", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        })
       }
-    } catch {
-      alert('保存请求失败');
+      setCreateOpen(false)
+      resetForm()
+      fetchTasks()
+    } catch (error) {
+      console.error("保存失败:", error)
     }
-  };
+  }
+
+  const handleDelete = async (id: number) => {
+    if (!confirm("确定删除此任务？")) return
+    try {
+      await fetch(`/api/scheduled-tasks/${id}`, { method: "DELETE" })
+      fetchTasks()
+    } catch (error) {
+      console.error("删除失败:", error)
+    }
+  }
+
+  const handleToggle = async (task: ScheduledTask) => {
+    try {
+      await fetch(`/api/scheduled-tasks/${task.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_active: !task.is_active }),
+      })
+      fetchTasks()
+    } catch (error) {
+      console.error("切换失败:", error)
+    }
+  }
+
+  const handleTrigger = async (id: number) => {
+    setTriggering(id)
+    try {
+      await fetch(`/api/scheduled-tasks/${id}/trigger`, { method: "POST" })
+      // 等待一下再刷新
+      setTimeout(() => {
+        fetchTasks()
+        setTriggering(null)
+      }, 2000)
+    } catch {
+      setTriggering(null)
+    }
+  }
+
+  const formatTime = (dateStr: string | null) => {
+    if (!dateStr) return "-"
+    return new Date(dateStr).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })
+  }
+
+  const cronPresets = [
+    { label: "每10分钟", value: "*/10 * * * *" },
+    { label: "每30分钟", value: "*/30 * * * *" },
+    { label: "每小时", value: "0 * * * *" },
+    { label: "每2小时", value: "0 */2 * * *" },
+    { label: "每天早上8点", value: "0 8 * * *" },
+    { label: "每天早晚各一次", value: "0 8,18 * * *" },
+  ]
 
   return (
     <div className="space-y-6">
-      {/* Header */}
+      {/* 页面标题 */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-foreground">定时任务</h1>
+          <h1 className="text-xl font-semibold">定时任务管理</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            配置定时调用智能体或工作流，自动执行并接收返回结果
+            配置定时调用诊断智能体，系统每天 18:00 自动合并当日报告
           </p>
         </div>
-        <button
-          onClick={() => {
-            setEditingTask(null);
-            setShowForm(true);
-          }}
-          className="inline-flex items-center gap-2 rounded-lg bg-sky-500 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-sky-600"
-        >
-          <Plus className="h-4 w-4" />
+        <Button onClick={openCreate}>
+          <Plus className="mr-2 h-4 w-4" />
           新建任务
-        </button>
+        </Button>
       </div>
 
-      {/* Task List */}
-      {loading ? (
-        <div className="flex items-center justify-center py-20">
-          <Loader2 className="h-6 w-6 animate-spin text-sky-500" />
-        </div>
-      ) : tasks.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-xl border border-border bg-white py-20">
-          <Clock className="h-12 w-12 text-slate-300" />
-          <p className="mt-4 text-sm text-muted-foreground">暂无定时任务</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            点击「新建任务」创建你的第一个定时调用
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {tasks.map((task) => (
-            <TaskCard
-              key={task.id}
-              task={task}
-              triggering={triggering === task.id}
-              expanded={expandedLogs === task.id}
-              logs={expandedLogs === task.id ? logs : []}
-              logsLoading={expandedLogs === task.id ? logsLoading : false}
-              onTrigger={() => handleTrigger(task.id)}
-              onDelete={() => handleDelete(task.id)}
-              onToggle={() => handleToggleActive(task)}
-              onEdit={() => {
-                setEditingTask(task);
-                setShowForm(true);
-              }}
-              onToggleLogs={() => toggleLogs(task.id)}
-            />
-          ))}
-        </div>
-      )}
-
-      {/* Create/Edit Form Modal */}
-      {showForm && (
-        <TaskFormModal
-          task={editingTask}
-          onClose={() => {
-            setShowForm(false);
-            setEditingTask(null);
-          }}
-          onSave={handleSave}
-        />
-      )}
-    </div>
-  );
-}
-
-/* ─── Task Card ─── */
-function TaskCard({
-  task,
-  triggering,
-  expanded,
-  logs,
-  logsLoading,
-  onTrigger,
-  onDelete,
-  onToggle,
-  onEdit,
-  onToggleLogs,
-}: {
-  task: ScheduledTask;
-  triggering: boolean;
-  expanded: boolean;
-  logs: ExecutionLog[];
-  logsLoading: boolean;
-  onTrigger: () => void;
-  onDelete: () => void;
-  onToggle: () => void;
-  onEdit: () => void;
-  onToggleLogs: () => void;
-}) {
-  const presetLabel = CRON_PRESETS.find((p) => p.value === task.cron_expression)?.label;
-  const isWorkflow = task.task_type === 'workflow';
-  const targetId = isWorkflow ? task.workflow_id : task.bot_id;
-
-  return (
-    <div className="rounded-xl border border-border bg-white shadow-sm transition-all duration-200 hover:shadow-md">
-      {/* Main row */}
-      <div className="flex items-center gap-4 p-4">
-        {/* Status indicator */}
-        <div
-          className={cn(
-            'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg',
-            task.is_active ? 'bg-emerald-50' : 'bg-slate-100'
-          )}
-        >
-          {task.is_active ? (
-            <Clock className="h-5 w-5 text-emerald-500" />
-          ) : (
-            <Pause className="h-5 w-5 text-slate-400" />
-          )}
-        </div>
-
-        {/* Info */}
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <h3 className="truncate text-sm font-semibold text-foreground">{task.name}</h3>
-            <span
-              className={cn(
-                'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium',
-                isWorkflow
-                  ? 'bg-violet-50 text-violet-600'
-                  : 'bg-sky-50 text-sky-600'
-              )}
-            >
-              {isWorkflow ? <Workflow className="h-3 w-3" /> : <Bot className="h-3 w-3" />}
-              {isWorkflow ? '工作流' : '智能体'}
-            </span>
-            <span
-              className={cn(
-                'inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium',
-                task.is_active
-                  ? 'bg-emerald-50 text-emerald-600'
-                  : 'bg-slate-100 text-slate-500'
-              )}
-            >
-              {task.is_active ? '运行中' : '已暂停'}
-            </span>
-          </div>
-          <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
-            <span>{isWorkflow ? 'Workflow' : 'Bot'} ID: {targetId || '-'}</span>
-            <span className="text-border">|</span>
-            <span>{presetLabel || task.cron_expression}</span>
-            {task.last_run_at && (
-              <>
-                <span className="text-border">|</span>
-                <span>
-                  上次: {new Date(task.last_run_at).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}
-                </span>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Actions */}
-        <div className="flex shrink-0 items-center gap-1.5">
-          <button
-            onClick={onTrigger}
-            disabled={triggering}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-slate-50 disabled:opacity-50"
-            title="手动触发"
-          >
-            {triggering ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Play className="h-3.5 w-3.5" />
-            )}
-            执行
-          </button>
-          <button
-            onClick={onToggle}
-            className={cn(
-              'inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-slate-50',
-              task.is_active
-                ? 'border-amber-200 text-amber-600'
-                : 'border-emerald-200 text-emerald-600'
-            )}
-            title={task.is_active ? '暂停' : '启用'}
-          >
-            {task.is_active ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
-            {task.is_active ? '暂停' : '启用'}
-          </button>
-          <button
-            onClick={onEdit}
-            className="inline-flex items-center rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-slate-50"
-          >
-            编辑
-          </button>
-          <button
-            onClick={onDelete}
-            className="inline-flex items-center rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-medium text-rose-500 transition-colors hover:bg-rose-50"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
-        </div>
-      </div>
-
-      {/* Logs toggle */}
-      <div className="border-t border-border px-4 py-2">
-        <button
-          onClick={onToggleLogs}
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-        >
-          <History className="h-3.5 w-3.5" />
-          执行日志
-          {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-        </button>
-      </div>
-
-      {/* Logs panel */}
-      {expanded && (
-        <div className="border-t border-border bg-slate-50/50 px-4 py-3">
-          {logsLoading ? (
-            <div className="flex items-center justify-center py-6">
-              <Loader2 className="h-5 w-5 animate-spin text-sky-500" />
+      {/* 任务列表 */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Clock className="h-4 w-4" />
+            任务列表
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
             </div>
-          ) : logs.length === 0 ? (
-            <p className="py-4 text-center text-xs text-muted-foreground">暂无执行记录</p>
+          ) : tasks.length === 0 ? (
+            <div className="py-8 text-center text-sm text-muted-foreground">
+              暂无定时任务，点击"新建任务"创建
+            </div>
           ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>任务名称</TableHead>
+                  <TableHead>类型</TableHead>
+                  <TableHead>Cron 表达式</TableHead>
+                  <TableHead>状态</TableHead>
+                  <TableHead>上次执行</TableHead>
+                  <TableHead className="text-right">操作</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {tasks.map((task) => (
+                  <TableRow key={task.id}>
+                    <TableCell className="font-medium">{task.name}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="text-xs">
+                        {task.task_type === "bot" ? "智能体" : "工作流"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="font-mono text-xs">{task.cron_expression}</TableCell>
+                    <TableCell>
+                      <button
+                        onClick={() => handleToggle(task)}
+                        className="flex items-center gap-1"
+                        title={task.is_active ? "点击停用" : "点击启用"}
+                      >
+                        {task.is_active ? (
+                          <Badge className="bg-emerald-500">运行中</Badge>
+                        ) : (
+                          <Badge variant="secondary">已停用</Badge>
+                        )}
+                      </button>
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {formatTime(task.last_run_at)}
+                    </TableCell>
+                    <TableCell className="flex items-center justify-end gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => handleTrigger(task.id)}
+                        disabled={triggering === task.id}
+                        title="手动触发"
+                      >
+                        {triggering === task.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Play className="h-4 w-4" />
+                        )}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => fetchLogs(task.id)}
+                        title="执行日志"
+                      >
+                        <FileText className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => openEdit(task)}
+                        title="编辑"
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-rose-500 hover:text-rose-600"
+                        onClick={() => handleDelete(task.id)}
+                        title="删除"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* 创建/编辑对话框 */}
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{editTask ? "编辑任务" : "新建任务"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
             <div className="space-y-2">
-              {logs.map((log) => (
-                <LogRow key={log.id} log={log} />
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ─── Log Row ─── */
-function LogRow({ log }: { log: ExecutionLog }) {
-  const [showDetail, setShowDetail] = useState(false);
-  const statusConfig: Record<string, { icon: React.ElementType; color: string; label: string }> = {
-    success: { icon: CheckCircle2, color: 'text-emerald-500', label: '成功' },
-    failed: { icon: XCircle, color: 'text-rose-500', label: '失败' },
-    running: { icon: Loader2, color: 'text-sky-500', label: '执行中' },
-  };
-  const cfg = statusConfig[log.status] || statusConfig.failed;
-  const StatusIcon = cfg.icon;
-
-  return (
-    <div className="rounded-lg border border-border bg-white p-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <StatusIcon className={cn('h-4 w-4', cfg.color, log.status === 'running' && 'animate-spin')} />
-          <span className="text-xs font-medium text-foreground">{cfg.label}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-[11px] text-muted-foreground">
-            {new Date(log.started_at).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}
-          </span>
-          <button
-            onClick={() => setShowDetail(!showDetail)}
-            className="text-[11px] text-sky-500 hover:underline"
-          >
-            {showDetail ? '收起' : '详情'}
-          </button>
-        </div>
-      </div>
-      {showDetail && (
-        <div className="mt-2 space-y-2 border-t border-border pt-2">
-          {log.prompt_sent && (
-            <div>
-              <p className="text-[11px] font-medium text-muted-foreground">发送内容 / 参数</p>
-              <p className="mt-0.5 rounded bg-slate-50 p-2 text-xs text-foreground whitespace-pre-wrap">
-                {log.prompt_sent}
-              </p>
-            </div>
-          )}
-          {log.response_content && (
-            <div>
-              <p className="text-[11px] font-medium text-muted-foreground">返回内容</p>
-              <p className="mt-0.5 max-h-40 overflow-auto rounded bg-slate-50 p-2 text-xs text-foreground whitespace-pre-wrap">
-                {log.response_content}
-              </p>
-            </div>
-          )}
-          {log.error_message && (
-            <div>
-              <p className="text-[11px] font-medium text-rose-500">错误信息</p>
-              <p className="mt-0.5 rounded bg-rose-50 p-2 text-xs text-rose-600 whitespace-pre-wrap">
-                {log.error_message}
-              </p>
-            </div>
-          )}
-          {log.completed_at && (
-            <p className="text-[11px] text-muted-foreground">
-              完成时间: {new Date(log.completed_at).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}
-            </p>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ─── Task Form Modal ─── */
-function TaskFormModal({
-  task,
-  onClose,
-  onSave,
-}: {
-  task: ScheduledTask | null;
-  onClose: () => void;
-  onSave: (data: {
-    name: string;
-    task_type: string;
-    bot_id: string;
-    workflow_id: string;
-    cron_expression: string;
-    prompt_template: string;
-    workflow_parameters: string;
-  }) => void;
-}) {
-  const [taskType, setTaskType] = useState<'bot' | 'workflow'>(
-    (task?.task_type as 'bot' | 'workflow') || 'bot'
-  );
-  const [name, setName] = useState(task?.name || '');
-  const [botId, setBotId] = useState(task?.bot_id || '');
-  const [workflowId, setWorkflowId] = useState(task?.workflow_id || '');
-  const [cronPreset, setCronPreset] = useState(
-    CRON_PRESETS.find((p) => p.value === task?.cron_expression)?.value !== undefined
-      ? task?.cron_expression || ''
-      : ''
-  );
-  const [customCron, setCustomCron] = useState(
-    !CRON_PRESETS.find((p) => p.value === task?.cron_expression) ? task?.cron_expression || '' : ''
-  );
-  const [prompt, setPrompt] = useState(task?.prompt_template || '');
-  const [workflowParams, setWorkflowParams] = useState(task?.workflow_parameters || '');
-  const [saving, setSaving] = useState(false);
-
-  const isCustomCron = cronPreset === '';
-  const finalCron = isCustomCron ? customCron : cronPreset;
-
-  const handleSubmit = async () => {
-    if (!name.trim()) {
-      alert('请填写任务名称');
-      return;
-    }
-    if (taskType === 'bot' && !botId.trim()) {
-      alert('请填写 Bot ID');
-      return;
-    }
-    if (taskType === 'workflow' && !workflowId.trim()) {
-      alert('请填写 Workflow ID');
-      return;
-    }
-    if (!finalCron.trim()) {
-      alert('请配置执行频率');
-      return;
-    }
-
-    // Validate workflow params JSON if provided
-    if (taskType === 'workflow' && workflowParams.trim()) {
-      try {
-        JSON.parse(workflowParams);
-      } catch {
-        alert('工作流参数必须是有效的 JSON 格式');
-        return;
-      }
-    }
-
-    setSaving(true);
-    await onSave({
-      name: name.trim(),
-      task_type: taskType,
-      bot_id: taskType === 'bot' ? botId.trim() : '',
-      workflow_id: taskType === 'workflow' ? workflowId.trim() : '',
-      cron_expression: finalCron.trim(),
-      prompt_template: prompt,
-      workflow_parameters: workflowParams,
-    });
-    setSaving(false);
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="w-full max-w-lg rounded-xl border border-border bg-white shadow-xl">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-border px-6 py-4">
-          <h2 className="text-base font-semibold text-foreground">
-            {task ? '编辑定时任务' : '新建定时任务'}
-          </h2>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
-            ✕
-          </button>
-        </div>
-
-        {/* Body */}
-        <div className="space-y-4 px-6 py-5">
-          {/* Task type selector */}
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-foreground">
-              任务类型 <span className="text-rose-500">*</span>
-            </label>
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                onClick={() => setTaskType('bot')}
-                className={cn(
-                  'flex items-center gap-2.5 rounded-lg border-2 px-4 py-3 text-left transition-all',
-                  taskType === 'bot'
-                    ? 'border-sky-500 bg-sky-50'
-                    : 'border-border hover:border-slate-300'
-                )}
-              >
-                <div className={cn(
-                  'flex h-8 w-8 items-center justify-center rounded-lg',
-                  taskType === 'bot' ? 'bg-sky-100' : 'bg-slate-100'
-                )}>
-                  <Bot className={cn('h-4 w-4', taskType === 'bot' ? 'text-sky-600' : 'text-slate-500')} />
-                </div>
-                <div>
-                  <p className={cn('text-sm font-medium', taskType === 'bot' ? 'text-sky-700' : 'text-foreground')}>
-                    智能体
-                  </p>
-                  <p className="text-[11px] text-muted-foreground">调用 Bot 对话</p>
-                </div>
-              </button>
-              <button
-                type="button"
-                onClick={() => setTaskType('workflow')}
-                className={cn(
-                  'flex items-center gap-2.5 rounded-lg border-2 px-4 py-3 text-left transition-all',
-                  taskType === 'workflow'
-                    ? 'border-violet-500 bg-violet-50'
-                    : 'border-border hover:border-slate-300'
-                )}
-              >
-                <div className={cn(
-                  'flex h-8 w-8 items-center justify-center rounded-lg',
-                  taskType === 'workflow' ? 'bg-violet-100' : 'bg-slate-100'
-                )}>
-                  <Workflow className={cn('h-4 w-4', taskType === 'workflow' ? 'text-violet-600' : 'text-slate-500')} />
-                </div>
-                <div>
-                  <p className={cn('text-sm font-medium', taskType === 'workflow' ? 'text-violet-700' : 'text-foreground')}>
-                    工作流
-                  </p>
-                  <p className="text-[11px] text-muted-foreground">执行 Workflow</p>
-                </div>
-              </button>
-            </div>
-          </div>
-
-          {/* Task name */}
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-foreground">
-              任务名称 <span className="text-rose-500">*</span>
-            </label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="例如：每日巡检诊断"
-              className="w-full rounded-lg border border-border px-3 py-2 text-sm text-foreground placeholder:text-slate-400 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
-            />
-          </div>
-
-          {/* Bot ID or Workflow ID */}
-          {taskType === 'bot' ? (
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-foreground">
-                Bot ID <span className="text-rose-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={botId}
-                onChange={(e) => setBotId(e.target.value)}
-                placeholder="扣子智能体 ID（URL 中的数字）"
-                className="w-full rounded-lg border border-border px-3 py-2 text-sm text-foreground placeholder:text-slate-400 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+              <Label>任务名称</Label>
+              <Input
+                value={formName}
+                onChange={(e) => setFormName(e.target.value)}
+                placeholder="如：施工现场诊断（每10分钟）"
               />
-              <p className="mt-1 text-[11px] text-muted-foreground">
-                在扣子平台打开智能体，URL 末尾的数字即为 Bot ID
-              </p>
             </div>
-          ) : (
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-foreground">
-                Workflow ID <span className="text-rose-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={workflowId}
-                onChange={(e) => setWorkflowId(e.target.value)}
-                placeholder="扣子工作流 ID（URL 中的数字）"
-                className="w-full rounded-lg border border-border px-3 py-2 text-sm text-foreground placeholder:text-slate-400 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
-              />
-              <p className="mt-1 text-[11px] text-muted-foreground">
-                在扣子平台打开工作流，URL 末尾的数字即为 Workflow ID
-              </p>
-            </div>
-          )}
 
-          {/* Cron schedule */}
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-foreground">
-              执行频率 <span className="text-rose-500">*</span>
-            </label>
-            <select
-              value={cronPreset}
-              onChange={(e) => setCronPreset(e.target.value)}
-              className="w-full rounded-lg border border-border px-3 py-2 text-sm text-foreground focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
-            >
-              {CRON_PRESETS.map((p) => (
-                <option key={p.value} value={p.value}>
-                  {p.label || '自定义'}
-                </option>
-              ))}
-            </select>
-            {isCustomCron && (
-              <input
-                type="text"
-                value={customCron}
-                onChange={(e) => setCustomCron(e.target.value)}
-                placeholder="cron 表达式，如 0 9 * * 1-5"
-                className="mt-2 w-full rounded-lg border border-border px-3 py-2 text-sm text-foreground placeholder:text-slate-400 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
-              />
+            <div className="space-y-2">
+              <Label>任务类型</Label>
+              <Select value={formType} onValueChange={setFormType}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="bot">智能体</SelectItem>
+                  <SelectItem value="workflow">工作流</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {formType === "bot" ? (
+              <div className="space-y-2">
+                <Label>智能体 Bot ID</Label>
+                <Input
+                  value={formBotId}
+                  onChange={(e) => setFormBotId(e.target.value)}
+                  placeholder="输入扣子智能体 ID"
+                />
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label>工作流 Workflow ID</Label>
+                <Input
+                  value={formWorkflowId}
+                  onChange={(e) => setFormWorkflowId(e.target.value)}
+                  placeholder="输入扣子工作流 ID"
+                />
+              </div>
             )}
-          </div>
 
-          {/* Bot: Prompt template */}
-          {taskType === 'bot' && (
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-foreground">
-                Prompt 模板
-              </label>
-              <textarea
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                placeholder="发送给智能体的消息内容。支持变量：&#10;{{now}} - 当前时间&#10;{{date}} - 当前日期&#10;{{timestamp}} - 时间戳"
-                rows={3}
-                className="w-full resize-none rounded-lg border border-border px-3 py-2 text-sm text-foreground placeholder:text-slate-400 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+            <div className="space-y-2">
+              <Label>Cron 表达式</Label>
+              <Input
+                value={formCron}
+                onChange={(e) => setFormCron(e.target.value)}
+                placeholder="*/10 * * * *"
+                className="font-mono"
               />
-            </div>
-          )}
-
-          {/* Workflow: Parameters JSON */}
-          {taskType === 'workflow' && (
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-foreground">
-                工作流参数 (JSON)
-              </label>
-              <textarea
-                value={workflowParams}
-                onChange={(e) => setWorkflowParams(e.target.value)}
-                placeholder='{"input": "hello", "key": "{{date}}"}'
-                rows={4}
-                className="w-full resize-none rounded-lg border border-border px-3 py-2 font-mono text-sm text-foreground placeholder:text-slate-400 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
-              />
-              <div className="mt-1.5 flex items-start gap-1.5">
-                <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-violet-500" />
-                <p className="text-[11px] text-muted-foreground">
-                  填写工作流的输入参数，JSON 格式。同样支持 {'{{now}}'}、{'{{date}}'}、{'{{timestamp}}'} 变量
-                </p>
+              <div className="flex flex-wrap gap-1">
+                {cronPresets.map((p) => (
+                  <button
+                    key={p.value}
+                    type="button"
+                    className="rounded bg-secondary px-2 py-0.5 text-xs text-secondary-foreground hover:bg-secondary/80"
+                    onClick={() => setFormCron(p.value)}
+                  >
+                    {p.label}
+                  </button>
+                ))}
               </div>
             </div>
-          )}
 
-          {/* Common: variable hints */}
-          <div className="flex items-start gap-1.5 rounded-lg bg-slate-50 p-3">
-            <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-sky-500" />
-            <div className="text-[11px] text-muted-foreground">
-              <p className="font-medium text-foreground">可用变量（自动替换）</p>
-              <p>{'{{now}}'} = 当前时间 | {'{{date}}'} = 当前日期 | {'{{timestamp}}'} = 时间戳</p>
+            {formType === "bot" ? (
+              <div className="space-y-2">
+                <Label>消息模板</Label>
+                <textarea
+                  value={formPrompt}
+                  onChange={(e) => setFormPrompt(e.target.value)}
+                  placeholder="发送给智能体的消息，支持 {{now}} {{date}} {{timestamp}} 变量"
+                  className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                />
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label>工作流参数 (JSON)</Label>
+                <textarea
+                  value={formWorkflowParams}
+                  onChange={(e) => setFormWorkflowParams(e.target.value)}
+                  placeholder='{"input": "value"} 支持 {{now}} {{date}} {{timestamp}} 变量'
+                  className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono"
+                />
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setCreateOpen(false)}>
+                取消
+              </Button>
+              <Button onClick={handleSave} disabled={!formName || !formCron}>
+                {editTask ? "保存" : "创建"}
+              </Button>
             </div>
           </div>
-        </div>
+        </DialogContent>
+      </Dialog>
 
-        {/* Footer */}
-        <div className="flex items-center justify-end gap-3 border-t border-border px-6 py-4">
-          <button
-            onClick={onClose}
-            className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-slate-50"
-          >
-            取消
-          </button>
-          <button
-            onClick={handleSubmit}
-            disabled={saving}
-            className={cn(
-              'inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white transition-colors disabled:opacity-50',
-              taskType === 'workflow'
-                ? 'bg-violet-500 hover:bg-violet-600'
-                : 'bg-sky-500 hover:bg-sky-600'
+      {/* 执行日志对话框 */}
+      <Dialog open={logsOpen} onOpenChange={setLogsOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>执行日志</DialogTitle>
+          </DialogHeader>
+          <div className="max-h-[400px] overflow-y-auto">
+            {logsLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-5 w-5 animate-spin" />
+              </div>
+            ) : logs.length === 0 ? (
+              <div className="py-8 text-center text-sm text-muted-foreground">暂无执行记录</div>
+            ) : (
+              <div className="space-y-3">
+                {logs.map((log) => (
+                  <Card key={log.id} className="border">
+                    <CardContent className="p-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          {log.status === "success" ? (
+                            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                          ) : log.status === "failed" ? (
+                            <XCircle className="h-4 w-4 text-rose-500" />
+                          ) : (
+                            <Loader2 className="h-4 w-4 animate-spin text-sky-500" />
+                          )}
+                          <span className="text-sm font-medium">
+                            {log.status === "success" ? "成功" : log.status === "failed" ? "失败" : "运行中"}
+                          </span>
+                        </div>
+                        <span className="text-xs text-muted-foreground">
+                          {formatTime(log.started_at)}
+                        </span>
+                      </div>
+                      {log.error_message && (
+                        <p className="mt-2 text-xs text-rose-500">{log.error_message}</p>
+                      )}
+                      {log.response_content && (
+                        <details className="mt-2">
+                          <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
+                            查看响应内容
+                          </summary>
+                          <pre className="mt-1 max-h-[200px] overflow-auto rounded bg-muted p-2 text-xs">
+                            {log.response_content.substring(0, 2000)}
+                          </pre>
+                        </details>
+                      )}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
             )}
-          >
-            {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-            {task ? '保存修改' : '创建任务'}
-          </button>
-        </div>
-      </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
-  );
+  )
 }

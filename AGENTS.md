@@ -33,8 +33,9 @@
 │   ├── hooks/              # 自定义 Hooks
 │   ├── lib/                # 工具库
 │   │   ├── utils.ts        # 通用工具函数 (cn)
-│   │   ├── bot-caller.ts   # 扣子智能体调用逻辑
-│   │   └── scheduler.ts    # 定时任务调度引擎 (node-cron)
+│   │   ├── bot-caller.ts   # 扣子智能体/工作流调用逻辑
+│   │   ├── scheduler.ts    # 定时任务调度引擎 (cron) + 诊断结果解析入库
+│   │   └── report-generator.ts  # 每日报告合并生成器 (exceljs)
 │   ├── storage/database/   # 数据库
 │   │   ├── supabase-client.ts  # Supabase 客户端
 │   │   └── shared/schema.ts    # 数据表定义
@@ -71,6 +72,14 @@
   - `id` (serial PK), `task_id` (int FK), `status` (varchar: running/success/failed)
   - `prompt_sent` (text), `response_content` (text), `error_message` (text)
   - `started_at` (timestamptz), `completed_at` (timestamptz)
+- `daily_reports`: 每日汇总报告表
+  - `id` (serial PK), `report_date` (varchar(10) UNIQUE) - 报告日期 YYYY-MM-DD
+  - `excel_url` (text) - 生成的 Excel 报告下载链接
+  - `file_name` (varchar) - 文件名
+  - `total_count` (int) - 诊断总次数
+  - `abnormal_count` (int) - 异常次数
+  - `normal_count` (int) - 正常次数
+  - `created_at` (timestamptz), `updated_at` (timestamptz)
 
 ## API 接口
 
@@ -78,19 +87,25 @@
 |------|------|------|
 | `/api/dashboard` | GET | 获取今日统计（总数/异常/正常） |
 | `/api/history?date=YYYY-MM-DD` | GET | 按日期查询诊断记录 |
-| `/api/reports` | GET | 获取近7天报告列表 |
-| `/api/reports/generate` | POST | 触发工作流生成 Excel 报告 |
+| `/api/reports` | GET | 获取每日汇总报告列表 |
+| `/api/reports/generate` | POST | 后端生成指定日期的 Excel 汇总报告 |
 | `/api/scheduled-tasks` | GET | 获取所有定时任务 |
-| `/api/scheduled-tasks` | POST | 创建定时任务 (body: name, bot_id, cron_expression, prompt_template) |
+| `/api/scheduled-tasks` | POST | 创建定时任务 (body: name, task_type, bot_id/workflow_id, cron_expression, prompt_template) |
 | `/api/scheduled-tasks/[id]` | GET/PUT/DELETE | 单个任务查询/更新/删除 |
 | `/api/scheduled-tasks/[id]/trigger` | POST | 手动触发一次任务 |
 | `/api/scheduled-tasks/[id]/logs?limit=N` | GET | 获取任务执行日志 |
 
-## 工作流集成
+## 业务流程
 
-- 报告生成使用扣子工作流 `To_excel_3` (ID: 7660403800638029824)
-- 输入参数: `input_json` (string) - 诊断数据 JSON
-- 输出: `URL` (下载链接), `file_name`, `abnormal_count`
+1. **定时诊断**：用户在"定时任务管理"页创建任务，配置智能体/工作流 ID 和 cron 表达式。调度引擎按 cron 定时调用扣子 API，解析返回的诊断 JSON 存入 `daily_diagnose_data`
+2. **每日合并**：每天 18:00 (Asia/Shanghai) 自动触发，读取当日所有诊断记录，用 exceljs 生成汇总 Excel，存入 `daily_reports` 表
+3. **报告下载**：用户在"报告下载"页查看历史报告并下载，也可手动选择日期生成报告
+4. **数据概览**：Dashboard 实时展示今日诊断统计
+
+## 诊断智能体
+
+- 诊断智能体："深燃智能场景识别应用"（用户自行创建）
+- 输出格式：包含 camera_id、site_name_watermark、camera_status、risk_items（8项检查）、capture_time、image_url、Excel_url 的 JSON
 
 - 项目文件（如 app 目录、pages 目录、components 等）默认初始化到 `src/` 目录下。
 

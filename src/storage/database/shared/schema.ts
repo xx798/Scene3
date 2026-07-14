@@ -52,6 +52,24 @@ export const scheduledTasks = pgTable(
 	]
 );
 
+export const dailyReports = pgTable(
+	"daily_reports",
+	{
+		id: serial().primaryKey(),
+		report_date: varchar("report_date", { length: 10 }).notNull().unique(),
+		excel_url: text("excel_url").notNull().default(""),
+		file_name: varchar("file_name", { length: 255 }),
+		total_count: integer("total_count").notNull().default(0),
+		abnormal_count: integer("abnormal_count").notNull().default(0),
+		normal_count: integer("normal_count").notNull().default(0),
+		created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		updated_at: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [
+		index("daily_reports_report_date_idx").on(table.report_date),
+	]
+);
+
 export const taskExecutionLogs = pgTable(
 	"task_execution_logs",
 	{
