@@ -80,12 +80,16 @@ export default function ScheduledTasksPage() {
 
   // 表单状态
   const [formName, setFormName] = useState("")
-  const [formType, setFormType] = useState("bot")
+  const [formType, setFormType] = useState("workflow")
   const [formBotId, setFormBotId] = useState("")
   const [formWorkflowId, setFormWorkflowId] = useState("")
   const [formCron, setFormCron] = useState("")
   const [formPrompt, setFormPrompt] = useState("")
   const [formWorkflowParams, setFormWorkflowParams] = useState("")
+
+  // 工作流列表
+  const [workflowNames, setWorkflowNames] = useState<{ workflow_id: string; workflow_name: string; description: string }[]>([])
+  const [fetchingWorkflows, setFetchingWorkflows] = useState(false)
 
   const fetchTasks = useCallback(async () => {
     try {
@@ -128,10 +132,24 @@ export default function ScheduledTasksPage() {
     setFormWorkflowParams("")
   }
 
+  const fetchWorkflows = async () => {
+    setFetchingWorkflows(true)
+    try {
+      const res = await fetch("/api/workflows")
+      const data = await res.json()
+      setWorkflowNames(Array.isArray(data) ? data : [])
+    } catch {
+      setWorkflowNames([])
+    } finally {
+      setFetchingWorkflows(false)
+    }
+  }
+
   const openCreate = () => {
     resetForm()
     setEditTask(null)
     setCreateOpen(true)
+    fetchWorkflows()
   }
 
   const openEdit = (task: ScheduledTask) => {
@@ -395,12 +413,29 @@ export default function ScheduledTasksPage() {
               </div>
             ) : (
               <div className="space-y-2">
-                <Label>工作流 Workflow ID</Label>
-                <Input
-                  value={formWorkflowId}
-                  onChange={(e) => setFormWorkflowId(e.target.value)}
-                  placeholder="输入扣子工作流 ID"
-                />
+                <Label>选择工作流</Label>
+                <Select value={formWorkflowId} onValueChange={setFormWorkflowId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={fetchingWorkflows ? "加载中..." : "请选择工作流"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {workflowNames.length === 0 && !fetchingWorkflows && (
+                      <SelectItem value="__none" disabled>
+                        暂无可用工作流
+                      </SelectItem>
+                    )}
+                    {workflowNames.map((wf) => (
+                      <SelectItem key={wf.workflow_id} value={wf.workflow_id}>
+                        {wf.workflow_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {formWorkflowId && (
+                  <p className="text-xs text-muted-foreground">
+                    ID: {formWorkflowId}
+                  </p>
+                )}
               </div>
             )}
 
