@@ -154,12 +154,34 @@ async function executeDailyMerge(): Promise<void> {
   console.log(`[Scheduler] 每日报告合并结果: ${result.message}`)
 }
 
+/**
+ * 从设置中读取 cron 表达式，默认每 10 分钟
+ */
+async function getCronExpression(): Promise<string> {
+  try {
+    const supabase = getSupabaseClient()
+    const { data: settings } = await supabase
+      .from("app_settings")
+      .select("setting_value")
+      .eq("setting_key", "workflow_selection")
+      .limit(1)
+
+    if (settings && settings.length > 0) {
+      const cronExpr = settings[0].setting_value?.cron_expression
+      if (cronExpr) return cronExpr
+    }
+  } catch {
+    // 忽略错误，使用默认值
+  }
+  return "*/10 * * * *"
+}
+
 let mainJob: CronJob | null = null
 let dailyMergeJob: CronJob | null = null
 
 /**
  * 初始化调度引擎
- * - 每 10 分钟运行一次选中的工作流
+ * - 读取设置中的 cron 表达式定时运行选中的工作流
  * - 每天 18:00 合并当日报告
  */
 export async function initScheduler(): Promise<void> {
@@ -168,9 +190,11 @@ export async function initScheduler(): Promise<void> {
     if (mainJob) { mainJob.stop() }
     if (dailyMergeJob) { dailyMergeJob.stop() }
 
-    // 主调度：每 10 分钟运行一次选中的工作流
+    const cronExpr = await getCronExpression()
+
+    // 主调度：按配置的 cron 表达式运行选中的工作流
     mainJob = new CronJob(
-      "*/10 * * * *",
+      cronExpr,
       () => {
         runSelectedWorkflows().catch(console.error)
       },
@@ -179,7 +203,7 @@ export async function initScheduler(): Promise<void> {
       "Asia/Shanghai"
     )
     mainJob.start()
-    console.log("[Scheduler] 主调度任务已注册 (每 10 分钟)")
+    console.log(`[Scheduler] 主调度任务已注册 (${cronExpr})`)
 
     // 每天 18:00 合并当日报告
     dailyMergeJob = new CronJob(
@@ -201,4 +225,15 @@ export async function initScheduler(): Promise<void> {
   } catch (error) {
     console.error("[Scheduler] 初始化失败:", error)
   }
+}
+
+/**
+ * 重新加载调度引擎（设置变更后调用）
+ */
+export async function reloadScheduler(): Promise<void> {
+  if (mainJob) { mainJob.stop() }
+  if (dailyMergeJob) { dailyMergeJob.stop() }
+  mainJob = null
+  dailyMergeJob = null
+  await initScheduler()
 }

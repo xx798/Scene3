@@ -12,13 +12,27 @@ interface WorkflowItem {
   type: string
 }
 
+const CRON_OPTIONS = [
+  { label: "每 5 分钟", value: "*/5 * * * *" },
+  { label: "每 10 分钟", value: "*/10 * * * *" },
+  { label: "每 15 分钟", value: "*/15 * * * *" },
+  { label: "每 30 分钟", value: "*/30 * * * *" },
+  { label: "每 1 小时", value: "0 * * * *" },
+  { label: "每 2 小时", value: "0 */2 * * *" },
+  { label: "每 6 小时", value: "0 */6 * * *" },
+  { label: "自定义", value: "custom" },
+]
+
 export default function SettingsPage() {
   const [workflows, setWorkflows] = useState<WorkflowItem[]>([])
   const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [cronExpression, setCronExpression] = useState("*/10 * * * *")
+  const [cronLabel, setCronLabel] = useState("每 10 分钟")
+  const [customCron, setCustomCron] = useState("")
+  const [showCustom, setShowCustom] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
-  const [fetching, setFetching] = useState(false)
 
   useEffect(() => {
     loadData()
@@ -38,6 +52,18 @@ export default function SettingsPage() {
       if (setData?.selected_workflow_ids) {
         setSelectedIds(setData.selected_workflow_ids)
       }
+      if (setData?.cron_expression) {
+        setCronExpression(setData.cron_expression)
+        const opt = CRON_OPTIONS.find((o) => o.value === setData.cron_expression)
+        if (opt) {
+          setCronLabel(opt.label)
+          setShowCustom(false)
+        } else {
+          setCronLabel("自定义")
+          setCustomCron(setData.cron_expression)
+          setShowCustom(true)
+        }
+      }
     } catch (e) {
       console.error("加载失败", e)
     }
@@ -53,14 +79,22 @@ export default function SettingsPage() {
 
   async function saveSettings() {
     setSaving(true)
+    const finalCron = showCustom ? customCron.trim() : cronExpression
     try {
-      await fetch("/api/settings", {
+      const res = await fetch("/api/settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ selected_workflow_ids: selectedIds }),
+        body: JSON.stringify({
+          selected_workflow_ids: selectedIds,
+          cron_expression: finalCron || "*/10 * * * *",
+        }),
       })
-      setSaved(true)
-      setTimeout(() => setSaved(false), 3000)
+      if (res.ok) {
+        setSaved(true)
+        setTimeout(() => setSaved(false), 3000)
+        // 通知调度器重新加载
+        fetch("/api/scheduler/reload", { method: "POST" }).catch(() => {})
+      }
     } catch (e) {
       console.error("保存失败", e)
     }
@@ -162,18 +196,57 @@ export default function SettingsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">自动调度说明</CardTitle>
+          <CardTitle className="text-base">调度频率</CardTitle>
         </CardHeader>
-        <CardContent className="text-sm text-[#64748B] space-y-2">
-          <p>• 系统每 <strong>10 分钟</strong> 自动执行一次所有选中的诊断工作流</p>
-          <p>• 每次执行结果自动解析并存入 <code>daily_diagnose_data</code> 数据库</p>
-          <p>• 每天 <strong>18:00 (北京时间)</strong> 自动合并当日所有诊断记录，生成汇总 Excel 报告</p>
-          <p>• 生成的报告可在"报告下载"页面查看和下载</p>
-          <p className="text-xs text-gray-400 mt-2">
-            {selectedIds.length > 0
-              ? `当前已选中 ${selectedIds.length} 个工作流`
-              : "暂未选中任何工作流，需至少选中一个才能自动调度"}
-          </p>
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap gap-2">
+            {CRON_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => {
+                  setCronExpression(opt.value)
+                  setShowCustom(false)
+                }}
+                className={`px-3 py-1.5 text-sm rounded-md border transition-colors ${
+                  !showCustom && cronExpression === opt.value
+                    ? "border-[#0EA5E9] bg-[#0EA5E9]/10 text-[#0EA5E9]"
+                    : "border-gray-200 text-[#64748B] hover:border-gray-300"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+            <button
+              onClick={() => setShowCustom(true)}
+              className={`px-3 py-1.5 text-sm rounded-md border transition-colors ${
+                showCustom
+                  ? "border-[#0EA5E9] bg-[#0EA5E9]/10 text-[#0EA5E9]"
+                  : "border-gray-200 text-[#64748B] hover:border-gray-300"
+              }`}
+            >
+              自定义
+            </button>
+          </div>
+          {showCustom && (
+            <div>
+              <label className="text-xs text-[#64748B] mb-1 block">Cron 表达式</label>
+              <input
+                type="text"
+                value={customCron}
+                onChange={(e) => setCustomCron(e.target.value)}
+                placeholder="如 */5 * * * *"
+                className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:border-[#0EA5E9]"
+              />
+              <p className="text-xs text-gray-400 mt-1">
+                格式: 分 时 日 月 周，如每5分钟 = */5 * * * *
+              </p>
+            </div>
+          )}
+
+          <div className="text-sm text-[#64748B] space-y-1 pt-2 border-t border-gray-100">
+            <p>• 当前选中 <strong>{selectedIds.length}</strong> 个工作流</p>
+            <p>• 每天 <strong>18:00 (北京时间)</strong> 自动合并当日诊断记录，生成汇总 Excel 报告</p>
+          </div>
         </CardContent>
       </Card>
     </div>
