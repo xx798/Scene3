@@ -10,8 +10,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: '深燃-安全巡检智能体',
-  description: '深燃-安全巡检智能体',
+  title: 'AI 诊断管理后台',
+  description: '图片AI诊断管理后台 - 数据概览、诊断记录、报告下载',
 };
 
 export default function RootLayout({
