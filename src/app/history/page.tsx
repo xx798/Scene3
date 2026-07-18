@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { Calendar, Search, Loader2, Image as ImageIcon, ExternalLink, ChevronDown, ChevronUp, Video, MapPin } from 'lucide-react';
+import { Calendar, Search, Loader2, Image as ImageIcon, ChevronDown, ChevronUp, Video, MapPin } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { subscribeDiagnosisInsert } from '@/lib/browser-supabase-client';
 
@@ -20,8 +20,6 @@ interface DiagnoseRecord {
   camera_abnormal_desc: string;
   risk_items: RiskItem[];
   capture_time: string;
-  image_url: string;
-  excel_url: string;
   status: string;
 }
 
@@ -123,31 +121,6 @@ function RecordDetail({ record }: { record: DiagnoseRecord }) {
               ))}
             </div>
           </div>
-
-          {/* Image preview */}
-          {record.image_url ? (
-            <div className="flex items-center gap-3">
-              <img
-                src={record.image_url}
-                alt="诊断图片"
-                className="h-16 w-16 rounded-lg border border-border object-cover"
-              />
-              <a
-                href={record.image_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1 text-xs text-sky-500 hover:underline"
-              >
-                <ExternalLink className="h-3 w-3" />
-                查看原图
-              </a>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <ImageIcon className="h-4 w-4" />
-              无诊断图片
-            </div>
-          )}
         </div>
       )}
     </div>
@@ -260,9 +233,6 @@ export default function HistoryPage() {
                 摄像头 / 场地
               </th>
               <th className="px-6 py-3.5 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                图片
-              </th>
-              <th className="px-6 py-3.5 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 设备状态
               </th>
               <th className="px-6 py-3.5 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
@@ -276,14 +246,14 @@ export default function HistoryPage() {
           <tbody className="divide-y divide-border">
             {loading ? (
               <tr>
-                <td colSpan={6} className="px-6 py-12 text-center">
+                <td colSpan={5} className="px-6 py-12 text-center">
                   <Loader2 className="mx-auto h-5 w-5 animate-spin text-sky-500" />
                   <p className="mt-2 text-sm text-muted-foreground">加载中...</p>
                 </td>
               </tr>
             ) : records.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-6 py-12 text-center">
+                <td colSpan={5} className="px-6 py-12 text-center">
                   <ImageIcon className="mx-auto h-8 w-8 text-muted-foreground/40" />
                   <p className="mt-2 text-sm text-muted-foreground">当日暂无诊断记录</p>
                 </td>
@@ -337,31 +307,6 @@ function RecordRow({
           </div>
         </td>
         <td className="px-6 py-4">
-          <div className="group relative inline-block">
-            {record.image_url ? (
-              <>
-                <img
-                  src={record.image_url}
-                  alt="诊断图片"
-                  className="h-10 w-10 rounded-lg border border-border object-cover transition-transform group-hover:scale-110"
-                />
-                <a
-                  href={record.image_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-sky-500 text-white opacity-0 transition-opacity group-hover:opacity-100"
-                >
-                  <ExternalLink className="h-2.5 w-2.5" />
-                </a>
-              </>
-            ) : (
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-dashed border-border bg-slate-50">
-                <ImageIcon className="h-4 w-4 text-muted-foreground/40" />
-              </div>
-            )}
-          </div>
-        </td>
-        <td className="px-6 py-4">
           <span className={cn('inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1', camClass)}>
             {record.camera_status}
           </span>
@@ -388,7 +333,7 @@ function RecordRow({
         </td>
       </tr>
       <tr>
-        <td colSpan={6} className="p-0">
+        <td colSpan={5} className="p-0">
           <RecordDetail record={record} />
         </td>
       </tr>

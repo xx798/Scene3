@@ -219,8 +219,6 @@ async function saveDiagnosisResult(data: Record<string, unknown>): Promise<void>
     capture_time: data.capture_time
       ? new Date(data.capture_time as string).toISOString()
       : new Date().toISOString(),
-    image_url: (data.image_url as string) || "",
-    excel_url: (data.Excel_url as string) || (data.excel_url as string) || "",
     status,
   })
 }
@@ -382,14 +380,8 @@ async function executeDiagnosisTask(task: TaskConfig): Promise<{
         if (!diagnosisData.camera_id && data.serial) {
           diagnosisData.camera_id = data.serial
         }
-        if (!diagnosisData.image_url && data.image_url) {
-          diagnosisData.image_url = data.image_url
-        }
         if (!diagnosisData.capture_time && data.capture_time) {
           diagnosisData.capture_time = data.capture_time
-        }
-        if (!diagnosisData.excel_url && data.URL) {
-          diagnosisData.excel_url = data.URL
         }
         await saveDiagnosisResult(diagnosisData)
       }
