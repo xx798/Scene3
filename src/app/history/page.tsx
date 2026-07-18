@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { Calendar, Search, Loader2, Image as ImageIcon, ExternalLink, ChevronDown, ChevronUp, Video, MapPin } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { subscribeDiagnosisInsert } from '@/lib/browser-supabase-client';
 
 interface RiskItem {
   item_name: string;
@@ -124,22 +125,29 @@ function RecordDetail({ record }: { record: DiagnoseRecord }) {
           </div>
 
           {/* Image preview */}
-          <div className="flex items-center gap-3">
-            <img
-              src={record.image_url}
-              alt="诊断图片"
-              className="h-16 w-16 rounded-lg border border-border object-cover"
-            />
-            <a
-              href={record.image_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1 text-xs text-sky-500 hover:underline"
-            >
-              <ExternalLink className="h-3 w-3" />
-              查看原图
-            </a>
-          </div>
+          {record.image_url ? (
+            <div className="flex items-center gap-3">
+              <img
+                src={record.image_url}
+                alt="诊断图片"
+                className="h-16 w-16 rounded-lg border border-border object-cover"
+              />
+              <a
+                href={record.image_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 text-xs text-sky-500 hover:underline"
+              >
+                <ExternalLink className="h-3 w-3" />
+                查看原图
+              </a>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <ImageIcon className="h-4 w-4" />
+              无诊断图片
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -168,8 +176,32 @@ export default function HistoryPage() {
     }
   }, []);
 
+  const cleanupRef = useRef<(() => void) | null>(null);
+
   useEffect(() => {
     fetchRecords(selectedDate);
+
+    // 订阅数据库 INSERT 事件，新诊断记录写入后自动刷新当前日期的列表
+    let cancelled = false;
+    subscribeDiagnosisInsert(() => {
+      if (!cancelled) fetchRecords(selectedDate);
+    }).then((unsubscribe) => {
+      if (cancelled) {
+        unsubscribe();
+      } else {
+        cleanupRef.current = unsubscribe;
+      }
+    }).catch(() => {
+      // Realtime 订阅失败时静默处理
+    });
+
+    return () => {
+      cancelled = true;
+      if (cleanupRef.current) {
+        cleanupRef.current();
+        cleanupRef.current = null;
+      }
+    };
   }, [selectedDate, fetchRecords]);
 
   const formatTime = (dateStr: string) => {
@@ -306,19 +338,27 @@ function RecordRow({
         </td>
         <td className="px-6 py-4">
           <div className="group relative inline-block">
-            <img
-              src={record.image_url}
-              alt="诊断图片"
-              className="h-10 w-10 rounded-lg border border-border object-cover transition-transform group-hover:scale-110"
-            />
-            <a
-              href={record.image_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-sky-500 text-white opacity-0 transition-opacity group-hover:opacity-100"
-            >
-              <ExternalLink className="h-2.5 w-2.5" />
-            </a>
+            {record.image_url ? (
+              <>
+                <img
+                  src={record.image_url}
+                  alt="诊断图片"
+                  className="h-10 w-10 rounded-lg border border-border object-cover transition-transform group-hover:scale-110"
+                />
+                <a
+                  href={record.image_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-sky-500 text-white opacity-0 transition-opacity group-hover:opacity-100"
+                >
+                  <ExternalLink className="h-2.5 w-2.5" />
+                </a>
+              </>
+            ) : (
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-dashed border-border bg-slate-50">
+                <ImageIcon className="h-4 w-4 text-muted-foreground/40" />
+              </div>
+            )}
           </div>
         </td>
         <td className="px-6 py-4">
