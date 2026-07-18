@@ -17,33 +17,183 @@ interface TaskConfig {
 const jobs = new Map<number, CronJob>()
 
 /**
- * 解析智能体/工作流返回的诊断结果 JSON
+ * 从文本中提取所有 markdown 代码块的内容
  */
-function parseDiagnosisJSON(text: string): Record<string, unknown> | null {
-  if (!text) return null
+function extractCodeBlocks(text: string): string[] {
+  const blocks: string[] = []
+  const regex = /```(?:json)?\s*\n?([\s\S]*?)\n?```/g
+  let match: RegExpExecArray | null
+  while ((match = regex.exec(text)) !== null) {
+    const content = match[1].trim()
+    if (content) blocks.push(content)
+  }
+  return blocks
+}
 
-  // 尝试提取 markdown 代码块中的 JSON
-  const codeBlockMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/)
-  const jsonStr = codeBlockMatch ? codeBlockMatch[1].trim() : text.trim()
+/**
+ * 用花括号配对法从文本中逐个提取完整的 JSON 对象
+ */
+function extractBraceObjects(text: string): string[] {
+  const objects: string[] = []
+  let depth = 0
+  let start = -1
 
-  try {
-    const parsed = JSON.parse(jsonStr)
-    if (typeof parsed === "object" && parsed !== null) {
-      return parsed
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]
+    // 跳过字符串内的花括号
+    if (ch === '"' && (i === 0 || text[i - 1] !== "\\")) {
+      // 跳过整个字符串
+      i++
+      while (i < text.length) {
+        if (text[i] === '"' && text[i - 1] !== "\\") break
+        i++
+      }
+      continue
     }
-  } catch {
-    // 尝试找到第一个 { 到最后一个 } 之间的内容
-    const firstBrace = text.indexOf("{")
-    const lastBrace = text.lastIndexOf("}")
-    if (firstBrace !== -1 && lastBrace > firstBrace) {
-      try {
-        return JSON.parse(text.substring(firstBrace, lastBrace + 1))
-      } catch {
-        // ignore
+    if (ch === "{") {
+      if (depth === 0) start = i
+      depth++
+    } else if (ch === "}") {
+      depth--
+      if (depth === 0 && start !== -1) {
+        objects.push(text.substring(start, i + 1))
+        start = -1
       }
     }
   }
+  return objects
+}
+
+/**
+ * 尝试解析单个 JSON 字符串，失败返回 null
+ */
+function tryParseJSON(str: string): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(str)
+    if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * 从对象中提取诊断数组（检查常见嵌套字段名）
+ */
+function extractArrayFromObject(obj: Record<string, unknown>): Record<string, unknown>[] | null {
+  const arrayKeys = ["results", "devices", "data", "items", "cameras", "diagnoses", "records", "list"]
+  for (const key of arrayKeys) {
+    const val = obj[key]
+    if (Array.isArray(val) && val.length > 0 && typeof val[0] === "object" && val[0] !== null) {
+      return val as Record<string, unknown>[]
+    }
+  }
+  // 遍历所有字段，找到第一个对象数组
+  for (const val of Object.values(obj)) {
+    if (Array.isArray(val) && val.length > 1 && typeof val[0] === "object" && val[0] !== null) {
+      return val as Record<string, unknown>[]
+    }
+  }
   return null
+}
+
+/**
+ * 解析智能体/工作流返回的诊断结果，支持单设备和多设备格式
+ * 返回诊断对象数组（至少包含 1 个元素，解析失败返回空数组）
+ *
+ * 支持的格式：
+ * 1. 多个 markdown 代码块，每个包含一个 JSON 对象
+ * 2. 标准 JSON 数组 [{...}, {...}]
+ * 3. 对象内含数组字段 {"results": [{...}, {...}]}
+ * 4. 多个 JSON 对象直接拼接 {...} {...}
+ * 5. 单个 JSON 对象 {...}
+ */
+function parseDiagnosisList(text: string): Record<string, unknown>[] {
+  if (!text) return []
+
+  // 优先级1：提取所有 markdown 代码块
+  const codeBlocks = extractCodeBlocks(text)
+  if (codeBlocks.length > 1) {
+    // 多个代码块 → 逐个解析
+    const results: Record<string, unknown>[] = []
+    for (const block of codeBlocks) {
+      // 代码块内可能是数组
+      try {
+        const parsed = JSON.parse(block)
+        if (Array.isArray(parsed)) {
+          for (const item of parsed) {
+            if (typeof item === "object" && item !== null) {
+              results.push(item as Record<string, unknown>)
+            }
+          }
+        } else if (typeof parsed === "object" && parsed !== null) {
+          results.push(parsed as Record<string, unknown>)
+        }
+      } catch {
+        const obj = tryParseJSON(block)
+        if (obj) results.push(obj)
+      }
+    }
+    if (results.length > 0) return results
+  }
+
+  // 优先级2：尝试直接 JSON.parse（可能是数组或单个对象）
+  const trimmed = text.trim()
+  try {
+    const parsed = JSON.parse(trimmed)
+    if (Array.isArray(parsed)) {
+      return parsed.filter(
+        (item: unknown): item is Record<string, unknown> =>
+          typeof item === "object" && item !== null
+      )
+    }
+    if (typeof parsed === "object" && parsed !== null) {
+      // 检查对象内是否嵌套数组
+      const nested = extractArrayFromObject(parsed as Record<string, unknown>)
+      if (nested) return nested
+      // 单个对象
+      return [parsed as Record<string, unknown>]
+    }
+  } catch {
+    // 不是合法 JSON，继续尝试其他方式
+  }
+
+  // 优先级3：单个代码块的情况
+  if (codeBlocks.length === 1) {
+    const obj = tryParseJSON(codeBlocks[0])
+    if (obj) {
+      const nested = extractArrayFromObject(obj)
+      if (nested) return nested
+      return [obj]
+    }
+  }
+
+  // 优先级4：花括号配对法提取多个对象
+  const braceObjects = extractBraceObjects(trimmed)
+  if (braceObjects.length > 1) {
+    const results: Record<string, unknown>[] = []
+    for (const objStr of braceObjects) {
+      const obj = tryParseJSON(objStr)
+      if (obj) results.push(obj)
+    }
+    if (results.length > 0) return results
+  }
+
+  // 优先级5：降级 — 取第一个 { 到最后一个 } 之间的内容
+  const firstBrace = trimmed.indexOf("{")
+  const lastBrace = trimmed.lastIndexOf("}")
+  if (firstBrace !== -1 && lastBrace > firstBrace) {
+    const obj = tryParseJSON(trimmed.substring(firstBrace, lastBrace + 1))
+    if (obj) {
+      const nested = extractArrayFromObject(obj)
+      if (nested) return nested
+      return [obj]
+    }
+  }
+
+  return []
 }
 
 /**
@@ -194,9 +344,9 @@ async function executeDiagnosisTask(task: TaskConfig): Promise<{
       )
       const fullText = await callCozeBot(task.bot_id, message)
 
-      // 解析并保存诊断结果
-      const diagnosis = parseDiagnosisJSON(fullText)
-      if (diagnosis) {
+      // 解析诊断结果（支持单设备和多设备）
+      const diagnosisList = parseDiagnosisList(fullText)
+      for (const diagnosis of diagnosisList) {
         await saveDiagnosisResult(diagnosis)
       }
 
@@ -216,19 +366,19 @@ async function executeDiagnosisTask(task: TaskConfig): Promise<{
       const data = await callCozeWorkflow(task.workflow_id, params)
       const fullText = JSON.stringify(data)
 
-      // 尝试从工作流输出中提取诊断结果
-      let diagnosisData: Record<string, unknown> | null = null
+      // 尝试从工作流输出中提取诊断结果（支持多设备）
+      let diagnosisList: Record<string, unknown>[] = []
 
       if (data.body && typeof data.body === "string") {
-        diagnosisData = parseDiagnosisJSON(data.body)
+        diagnosisList = parseDiagnosisList(data.body)
       } else if (data.inspection_result && typeof data.inspection_result === "string") {
-        diagnosisData = parseDiagnosisJSON(data.inspection_result)
+        diagnosisList = parseDiagnosisList(data.inspection_result)
       } else {
-        diagnosisData = parseDiagnosisJSON(fullText)
+        diagnosisList = parseDiagnosisList(fullText)
       }
 
-      // 补充工作流输出中的字段
-      if (diagnosisData) {
+      // 逐条补充工作流字段并入库
+      for (const diagnosisData of diagnosisList) {
         if (!diagnosisData.camera_id && data.serial) {
           diagnosisData.camera_id = data.serial
         }
