@@ -251,6 +251,12 @@ function extractNestedJSON(
  * 将诊断结果保存到 daily_diagnose_data 表
  */
 async function saveDiagnosisResult(data: Record<string, unknown>): Promise<void> {
+  // 跳过没有有效诊断数据的空对象
+  if (!data.camera_id && !data.camera_status && (!Array.isArray(data.risk_items) || data.risk_items.length === 0)) {
+    console.log("[scheduler] 跳过空诊断记录:", JSON.stringify(data).substring(0, 200))
+    return
+  }
+
   const supabase = getSupabaseClient()
   const riskItems = Array.isArray(data.risk_items) ? data.risk_items : []
 
@@ -413,8 +419,13 @@ async function callCozeWorkflow(
           }
 
           // 收集输出节点的内容（node_type=Message 且有 content）
+          // 过滤掉空内容 {} 和中间节点的无效输出
           if (event.content && event.node_type === "Message") {
-            outputContent += event.content
+            const content = event.content.trim()
+            // 跳过空对象 {} 或纯空白内容
+            if (content && content !== "{}" && content.length > 2) {
+              outputContent += content
+            }
           }
         } catch {
           // 忽略解析失败的行
@@ -432,7 +443,26 @@ async function callCozeWorkflow(
       try {
         return JSON.parse(outputContent)
       } catch {
-        // 输出不是 JSON，包装返回
+        // 输出不是合法 JSON，尝试提取多个拼接的 JSON 对象
+        const cleaned = cleanJSONString(outputContent)
+        const objects = extractBraceObjects(cleaned)
+        if (objects.length > 0) {
+          const results: Record<string, unknown>[] = []
+          for (const objStr of objects) {
+            try {
+              const parsed = JSON.parse(objStr)
+              if (typeof parsed === "object" && parsed !== null) {
+                results.push(parsed)
+              }
+            } catch {
+              // 忽略无法解析的对象
+            }
+          }
+          if (results.length > 0) {
+            return results.length === 1 ? results[0] : { results }
+          }
+        }
+        // 无法提取有效对象，包装返回
         return { output: outputContent }
       }
     }
