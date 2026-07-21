@@ -24,19 +24,40 @@ interface DiagnoseRecord {
 }
 
 function RiskItemBadge({ item }: { item: RiskItem }) {
-  const statusConfig: Record<string, { bg: string; text: string; label: string }> = {
-    '正常': { bg: 'bg-emerald-50', text: 'text-emerald-600', label: '正常' },
-    '异常': { bg: 'bg-rose-50', text: 'text-rose-600', label: '异常' },
-    '无法识别': { bg: 'bg-amber-50', text: 'text-amber-600', label: '无法识别' },
+  const [expanded, setExpanded] = useState(false);
+  const statusConfig: Record<string, { bg: string; text: string; label: string; descColor: string }> = {
+    '正常': { bg: 'bg-emerald-50', text: 'text-emerald-600', label: '正常', descColor: 'text-emerald-600' },
+    '异常': { bg: 'bg-rose-50', text: 'text-rose-600', label: '异常', descColor: 'text-rose-600' },
+    '无法识别': { bg: 'bg-amber-50', text: 'text-amber-600', label: '无法识别', descColor: 'text-amber-600' },
   };
   const config = statusConfig[item.status] || statusConfig['无法识别'];
+  const hasDesc = item.risk_desc && item.risk_desc.trim() !== '';
 
   return (
-    <div className="flex items-center justify-between gap-2 rounded-lg border border-border px-3 py-2 text-xs">
-      <span className="font-medium text-foreground">{item.item_name}</span>
-      <span className={cn('shrink-0 rounded-full px-2 py-0.5 font-medium', config.bg, config.text)}>
-        {config.label}
-      </span>
+    <div className="rounded-lg border border-border overflow-hidden">
+      <button
+        type="button"
+        onClick={() => hasDesc && setExpanded(!expanded)}
+        className={cn(
+          "flex items-center justify-between gap-2 w-full px-3 py-2 text-xs transition-colors",
+          hasDesc && "cursor-pointer hover:bg-muted/50"
+        )}
+      >
+        <span className={cn('font-medium', config.descColor)}>{item.item_name}</span>
+        <div className="flex items-center gap-1.5">
+          <span className={cn('shrink-0 rounded-full px-2 py-0.5 font-medium', config.bg, config.text)}>
+            {config.label}
+          </span>
+          {hasDesc && (
+            expanded ? <ChevronUp className="h-3 w-3 text-muted-foreground" /> : <ChevronDown className="h-3 w-3 text-muted-foreground" />
+          )}
+        </div>
+      </button>
+      {expanded && hasDesc && (
+        <div className={cn('px-3 pb-2 pt-0.5 text-[11px] leading-tight border-t border-border', config.descColor)}>
+          {item.risk_desc}
+        </div>
+      )}
     </div>
   );
 }
@@ -112,12 +133,7 @@ function RecordDetail({ record }: { record: DiagnoseRecord }) {
             </p>
             <div className="grid gap-1.5 sm:grid-cols-2">
               {riskItems.map((item, idx) => (
-                <div key={idx} className="relative">
-                  <RiskItemBadge item={item} />
-                  {item.risk_desc && (
-                    <p className="mt-0.5 px-3 text-[11px] text-rose-500 leading-tight">{item.risk_desc}</p>
-                  )}
-                </div>
+                <RiskItemBadge key={idx} item={item} />
               ))}
             </div>
           </div>
