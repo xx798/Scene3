@@ -298,7 +298,7 @@ async function callCozeBot(botId: string, message: string): Promise<string> {
 }
 
 /**
- * 调用扣子工作流 API（带 6 分钟超时）
+ * 调用扣子工作流流式 API（stream_run），收集输出节点的完整内容
  */
 async function callCozeWorkflow(
   workflowId: string,
@@ -311,7 +311,7 @@ async function callCozeWorkflow(
   const timeoutId = setTimeout(() => controller.abort(), 360000) // 6 分钟超时
 
   try {
-    const response = await fetch(`${baseUrl}/v1/workflow/run`, {
+    const response = await fetch(`${baseUrl}/v1/workflow/stream_run`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,
@@ -324,26 +324,70 @@ async function callCozeWorkflow(
       signal: controller.signal,
     })
 
-    const result = await response.json()
-
     if (!response.ok) {
-      throw new Error(`工作流调用失败: HTTP ${response.status}, ${JSON.stringify(result)}`)
+      const errorText = await response.text()
+      throw new Error(`工作流调用失败: HTTP ${response.status}, ${errorText}`)
     }
 
-    // code=0 表示调用成功
-    if (result.code === 0) {
-      if (result.data) {
+    if (!response.body) {
+      throw new Error("工作流返回无响应体")
+    }
+
+    // 解析 SSE 流，收集输出节点的 content
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let outputContent = ""
+    let buffer = ""
+    let hasError = ""
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split("\n")
+      buffer = lines.pop() || "" // 保留未完成的行
+
+      for (const line of lines) {
+        if (!line.startsWith("data:")) continue
+        const jsonStr = line.slice(5).trim()
+        if (!jsonStr || jsonStr === "[DONE]") continue
+
         try {
-          return JSON.parse(result.data)
+          const event = JSON.parse(jsonStr)
+
+          // 收集错误信息
+          if (event.error_code) {
+            hasError = `error_code=${event.error_code}, msg=${event.error_message || "未知错误"}`
+          }
+
+          // 收集输出节点的内容（node_type=Message 且有 content）
+          if (event.content && event.node_type === "Message") {
+            outputContent += event.content
+          }
         } catch {
-          return { output: result.data }
+          // 忽略解析失败的行
         }
       }
-      // 调用成功但 data 为空，返回空对象（工作流可能无输出或当前无施工）
-      return {}
     }
 
-    throw new Error(`工作流调用失败: code=${result.code}, msg=${result.msg || "未知错误"}`)
+    // 如果有错误且没有输出内容，抛出错误
+    if (hasError && !outputContent) {
+      throw new Error(`工作流调用失败: ${hasError}`)
+    }
+
+    // 尝试解析输出内容为 JSON
+    if (outputContent) {
+      try {
+        return JSON.parse(outputContent)
+      } catch {
+        // 输出不是 JSON，包装返回
+        return { output: outputContent }
+      }
+    }
+
+    // 无输出内容
+    return {}
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
       throw new Error("工作流调用超时（6分钟）")
