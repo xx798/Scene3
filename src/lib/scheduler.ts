@@ -330,14 +330,20 @@ async function callCozeWorkflow(
       throw new Error(`工作流调用失败: HTTP ${response.status}, ${JSON.stringify(result)}`)
     }
 
-    if (result.data) {
-      try {
-        return JSON.parse(result.data)
-      } catch {
-        return { output: result.data }
+    // code=0 表示调用成功
+    if (result.code === 0) {
+      if (result.data) {
+        try {
+          return JSON.parse(result.data)
+        } catch {
+          return { output: result.data }
+        }
       }
+      // 调用成功但 data 为空，返回空对象（工作流可能无输出或当前无施工）
+      return {}
     }
-    throw new Error(`工作流调用失败: ${result.msg || JSON.stringify(result)}`)
+
+    throw new Error(`工作流调用失败: code=${result.code}, msg=${result.msg || "未知错误"}`)
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
       throw new Error("工作流调用超时（60s）")
