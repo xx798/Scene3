@@ -153,6 +153,7 @@ function parseDiagnosisList(text: string): Record<string, unknown>[] {
       // 检查是否是嵌套结构（如 {output: "JSON字符串"}）
       const nested = extractNestedJSON(parsed as Record<string, unknown>)
       if (nested) {
+        if (Array.isArray(nested)) return nested
         const arr = extractArrayFromObject(nested)
         if (arr) return arr
         return [nested]
@@ -213,22 +214,33 @@ function cleanJSONString(str: string): string {
 
 /**
  * 尝试从对象的 output/data/result 等字段中提取嵌套的 JSON 字符串并解析
+ * 返回单个对象或对象数组（当嵌套内容包含多个拼接的 JSON 对象时）
  */
 function extractNestedJSON(
   obj: Record<string, unknown>
-): Record<string, unknown> | null {
+): Record<string, unknown> | Record<string, unknown>[] | null {
   const fieldsToCheck = ["output", "data", "result", "content", "response"]
   for (const field of fieldsToCheck) {
     const value = obj[field]
     if (typeof value === "string" && value.trim().startsWith("{")) {
+      const cleaned = cleanJSONString(value)
+      // 先尝试直接解析为单个 JSON
       try {
-        const cleaned = cleanJSONString(value)
         const parsed = JSON.parse(cleaned)
         if (typeof parsed === "object" && parsed !== null) {
           return parsed as Record<string, unknown>
         }
       } catch {
-        // 不是合法 JSON，继续尝试下一个字段
+        // 不是单个 JSON，尝试用花括号配对法提取多个对象
+        const multiObjects = extractBraceObjects(cleaned)
+        if (multiObjects.length > 0) {
+          const results: Record<string, unknown>[] = []
+          for (const objStr of multiObjects) {
+            const parsed = tryParseJSON(objStr)
+            if (parsed) results.push(parsed)
+          }
+          if (results.length > 0) return results
+        }
       }
     }
   }
