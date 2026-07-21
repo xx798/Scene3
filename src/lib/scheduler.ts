@@ -298,7 +298,7 @@ async function callCozeBot(botId: string, message: string): Promise<string> {
 }
 
 /**
- * 调用扣子工作流 API（带 60 秒超时）
+ * 调用扣子工作流 API（带 6 分钟超时）
  */
 async function callCozeWorkflow(
   workflowId: string,
@@ -308,7 +308,7 @@ async function callCozeWorkflow(
   const baseUrl = process.env.COZE_API_BASE_URL || "https://api.coze.cn"
 
   const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), 60000)
+  const timeoutId = setTimeout(() => controller.abort(), 360000) // 6 分钟超时
 
   try {
     const response = await fetch(`${baseUrl}/v1/workflow/run`, {
@@ -346,7 +346,7 @@ async function callCozeWorkflow(
     throw new Error(`工作流调用失败: code=${result.code}, msg=${result.msg || "未知错误"}`)
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
-      throw new Error("工作流调用超时（60s）")
+      throw new Error("工作流调用超时（6分钟）")
     }
     throw error
   } finally {
