@@ -248,6 +248,32 @@ function extractNestedJSON(
 }
 
 /**
+ * 解析 capture_time，处理各种格式（包括无效格式）
+ */
+function parseCaptureTime(value: unknown): string {
+  const now = new Date().toISOString()
+  if (!value || typeof value !== "string") return now
+
+  const str = value.trim()
+  // 跳过明显无效的值
+  if (!str || str === "无" || str === "null" || str === "undefined") return now
+
+  // 尝试解析为时间戳（纯数字）
+  if (/^\d{10,13}$/.test(str)) {
+    const ts = str.length === 10 ? parseInt(str) * 1000 : parseInt(str)
+    const date = new Date(ts)
+    if (!isNaN(date.getTime())) return date.toISOString()
+  }
+
+  // 尝试标准日期格式
+  const date = new Date(str)
+  if (!isNaN(date.getTime())) return date.toISOString()
+
+  // 无法解析，返回当前时间
+  return now
+}
+
+/**
  * 将诊断结果保存到 daily_diagnose_data 表
  */
 async function saveDiagnosisResult(data: Record<string, unknown>): Promise<void> {
@@ -273,9 +299,7 @@ async function saveDiagnosisResult(data: Record<string, unknown>): Promise<void>
     camera_status: (data.camera_status as string) || "正常",
     camera_abnormal_desc: (data.camera_abnormal_desc as string) || "正常",
     risk_items: riskItems,
-    capture_time: data.capture_time
-      ? new Date(data.capture_time as string).toISOString()
-      : new Date().toISOString(),
+    capture_time: parseCaptureTime(data.capture_time),
     status,
   })
 }
