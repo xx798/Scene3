@@ -150,9 +150,16 @@ function parseDiagnosisList(text: string): Record<string, unknown>[] {
       )
     }
     if (typeof parsed === "object" && parsed !== null) {
+      // 检查是否是嵌套结构（如 {output: "JSON字符串"}）
+      const nested = extractNestedJSON(parsed as Record<string, unknown>)
+      if (nested) {
+        const arr = extractArrayFromObject(nested)
+        if (arr) return arr
+        return [nested]
+      }
       // 检查对象内是否嵌套数组
-      const nested = extractArrayFromObject(parsed as Record<string, unknown>)
-      if (nested) return nested
+      const nestedArr = extractArrayFromObject(parsed as Record<string, unknown>)
+      if (nestedArr) return nestedArr
       // 单个对象
       return [parsed as Record<string, unknown>]
     }
@@ -194,6 +201,38 @@ function parseDiagnosisList(text: string): Record<string, unknown>[] {
   }
 
   return []
+}
+
+/**
+ * 清理 JSON 字符串中的模板残留（如 {{}}、{{xxx}}）
+ */
+function cleanJSONString(str: string): string {
+  // 移除 {{}} 和 {{...}} 等模板标记
+  return str.replace(/\{\{[^}]*\}\}/g, "").replace(/\{\{\}\}/g, "")
+}
+
+/**
+ * 尝试从对象的 output/data/result 等字段中提取嵌套的 JSON 字符串并解析
+ */
+function extractNestedJSON(
+  obj: Record<string, unknown>
+): Record<string, unknown> | null {
+  const fieldsToCheck = ["output", "data", "result", "content", "response"]
+  for (const field of fieldsToCheck) {
+    const value = obj[field]
+    if (typeof value === "string" && value.trim().startsWith("{")) {
+      try {
+        const cleaned = cleanJSONString(value)
+        const parsed = JSON.parse(cleaned)
+        if (typeof parsed === "object" && parsed !== null) {
+          return parsed as Record<string, unknown>
+        }
+      } catch {
+        // 不是合法 JSON，继续尝试下一个字段
+      }
+    }
+  }
+  return null
 }
 
 /**
