@@ -264,6 +264,10 @@ async function callCozeBot(botId: string, message: string): Promise<string> {
 
   const result = await response.json()
 
+  if (!response.ok) {
+    throw new Error(`Bot 调用失败: HTTP ${response.status}, ${JSON.stringify(result)}`)
+  }
+
   if (result.data && result.data.length > 0) {
     const chatId = result.data[0].id
     const conversationId = result.data[0].conversation_id
@@ -317,6 +321,10 @@ async function callCozeWorkflow(
 
   const result = await response.json()
 
+  if (!response.ok) {
+    throw new Error(`工作流调用失败: HTTP ${response.status}, ${JSON.stringify(result)}`)
+  }
+
   if (result.data) {
     try {
       return JSON.parse(result.data)
@@ -324,7 +332,7 @@ async function callCozeWorkflow(
       return { output: result.data }
     }
   }
-  throw new Error(result.msg || "工作流调用失败")
+  throw new Error(`工作流调用失败: ${result.msg || JSON.stringify(result)}`)
 }
 
 /**
