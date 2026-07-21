@@ -298,7 +298,7 @@ async function callCozeBot(botId: string, message: string): Promise<string> {
 }
 
 /**
- * 调用扣子工作流 API
+ * 调用扣子工作流 API（带 60 秒超时）
  */
 async function callCozeWorkflow(
   workflowId: string,
@@ -307,32 +307,45 @@ async function callCozeWorkflow(
   const token = process.env.COZE_WORKLOAD_API_TOKEN
   const baseUrl = process.env.COZE_API_BASE_URL || "https://api.coze.cn"
 
-  const response = await fetch(`${baseUrl}/v1/workflow/run`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      workflow_id: workflowId,
-      parameters,
-    }),
-  })
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 60000)
 
-  const result = await response.json()
+  try {
+    const response = await fetch(`${baseUrl}/v1/workflow/run`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        workflow_id: workflowId,
+        parameters,
+      }),
+      signal: controller.signal,
+    })
 
-  if (!response.ok) {
-    throw new Error(`工作流调用失败: HTTP ${response.status}, ${JSON.stringify(result)}`)
-  }
+    const result = await response.json()
 
-  if (result.data) {
-    try {
-      return JSON.parse(result.data)
-    } catch {
-      return { output: result.data }
+    if (!response.ok) {
+      throw new Error(`工作流调用失败: HTTP ${response.status}, ${JSON.stringify(result)}`)
     }
+
+    if (result.data) {
+      try {
+        return JSON.parse(result.data)
+      } catch {
+        return { output: result.data }
+      }
+    }
+    throw new Error(`工作流调用失败: ${result.msg || JSON.stringify(result)}`)
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new Error("工作流调用超时（60s）")
+    }
+    throw error
+  } finally {
+    clearTimeout(timeoutId)
   }
-  throw new Error(`工作流调用失败: ${result.msg || JSON.stringify(result)}`)
 }
 
 /**
