@@ -229,10 +229,7 @@ export async function mergeAndSaveDailyReport(reportDate: string): Promise<{
     }
 
     const supabase = getSupabaseClient()
-    const domain = process.env.COZE_PROJECT_DOMAIN_DEFAULT || ""
-    const fullUrl = `${domain}${result.url}`
-
-    // 检查是否已有当日报告
+    // 存储相对路径，前端下载时直接使用，避免外部域名 fetch 失败
     const { data: existing } = await supabase
       .from("daily_reports")
       .select("id")
@@ -244,7 +241,7 @@ export async function mergeAndSaveDailyReport(reportDate: string): Promise<{
       await supabase
         .from("daily_reports")
         .update({
-          excel_url: fullUrl,
+          excel_url: result.url,
           file_name: result.file_name,
           total_count: result.total_count,
           abnormal_count: result.abnormal_count,
@@ -256,7 +253,7 @@ export async function mergeAndSaveDailyReport(reportDate: string): Promise<{
       // 新增
       await supabase.from("daily_reports").insert({
         report_date: reportDate,
-        excel_url: fullUrl,
+        excel_url: result.url,
         file_name: result.file_name,
         total_count: result.total_count,
         abnormal_count: result.abnormal_count,
@@ -267,7 +264,7 @@ export async function mergeAndSaveDailyReport(reportDate: string): Promise<{
     return {
       success: true,
       message: `报告生成成功：${result.file_name}，共 ${result.total_count} 条记录`,
-      url: fullUrl,
+      url: result.url,
     }
   } catch (error) {
     console.error("[ReportMerger] 合并报告失败:", error)
