@@ -349,9 +349,11 @@ async function callCozeBot(botId: string, message: string): Promise<string> {
     throw new Error(`Bot 调用失败: HTTP ${response.status}, ${JSON.stringify(result)}`)
   }
 
-  if (result.data && result.data.length > 0) {
-    const chatId = result.data[0].id
-    const conversationId = result.data[0].conversation_id
+  // 兼容 data 为数组或对象两种格式
+  const chatData = Array.isArray(result.data) ? result.data[0] : result.data
+  if (chatData && chatData.id) {
+    const chatId = chatData.id
+    const conversationId = chatData.conversation_id
 
     // 轮询获取结果
     for (let i = 0; i < 60; i++) {
