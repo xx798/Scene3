@@ -81,18 +81,26 @@ function tryParseJSON(str: string): Record<string, unknown> | null {
 
 /**
  * 从对象中提取诊断数组（检查常见嵌套字段名）
+ * 只有当数组元素包含诊断特征字段（camera_id / site_name_watermark / camera_status）时才返回，
+ * 避免将 risk_items 等非诊断数组误识别为诊断列表
  */
+function isDiagnosisObject(obj: unknown): boolean {
+  if (typeof obj !== "object" || obj === null) return false
+  const record = obj as Record<string, unknown>
+  return "camera_id" in record || "site_name_watermark" in record || "camera_status" in record
+}
+
 function extractArrayFromObject(obj: Record<string, unknown>): Record<string, unknown>[] | null {
   const arrayKeys = ["results", "devices", "data", "items", "cameras", "diagnoses", "records", "list"]
   for (const key of arrayKeys) {
     const val = obj[key]
-    if (Array.isArray(val) && val.length > 0 && typeof val[0] === "object" && val[0] !== null) {
+    if (Array.isArray(val) && val.length > 0 && isDiagnosisObject(val[0])) {
       return val as Record<string, unknown>[]
     }
   }
-  // 遍历所有字段，找到第一个对象数组
+  // 遍历所有字段，找到第一个诊断对象数组
   for (const val of Object.values(obj)) {
-    if (Array.isArray(val) && val.length > 1 && typeof val[0] === "object" && val[0] !== null) {
+    if (Array.isArray(val) && val.length > 1 && isDiagnosisObject(val[0])) {
       return val as Record<string, unknown>[]
     }
   }
