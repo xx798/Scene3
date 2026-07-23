@@ -378,10 +378,11 @@ async function callCozeBot(botId: string, message: string): Promise<string> {
           { headers: { Authorization: `Bearer ${token}` } }
         )
         const msgData = await msgRes.json()
-        const botMessage = msgData.data?.find(
+        // 获取所有 assistant 消息并合并（智能体可能返回多条消息）
+        const botMessages = msgData.data?.filter(
           (m: Record<string, string>) => m.role === "assistant" && m.type === "answer"
-        )
-        return botMessage?.content || ""
+        ) || []
+        return botMessages.map((m: Record<string, string>) => m.content).join("\n")
       }
     }
   }
