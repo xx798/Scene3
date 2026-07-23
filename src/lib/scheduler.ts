@@ -363,8 +363,8 @@ async function callCozeBot(botId: string, message: string): Promise<string> {
     const chatId = chatData.id
     const conversationId = chatData.conversation_id
 
-    // 轮询获取结果
-    for (let i = 0; i < 60; i++) {
+    // 轮询获取结果（最多 6 分钟）
+    for (let i = 0; i < 180; i++) {
       await new Promise((r) => setTimeout(r, 2000))
 
       const retrieveRes = await fetch(`${baseUrl}/v3/chat/retrieve?chat_id=${chatId}&conversation_id=${conversationId}`, {
