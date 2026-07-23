@@ -73,20 +73,12 @@ export default function ReportsPage() {
   }
 
   const handleDownload = async (report: DailyReport) => {
-    if (!report.excel_url) return
-
-    // 统一使用相对路径下载
-    const url = report.excel_url.startsWith("/")
-      ? report.excel_url
-      : new URL(report.excel_url).pathname
-
     try {
-      const response = await fetch(url)
-      if (!response.ok) throw new Error(`下载失败: HTTP ${response.status}`)
-
-      const contentType = response.headers.get("content-type") || ""
-      if (contentType.includes("text/html")) {
-        throw new Error("服务器返回了 HTML 页面，文件可能不存在")
+      // 调用下载接口，后端会自动处理文件生成
+      const response = await fetch(`/api/reports/download?id=${report.id}`)
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || `下载失败: HTTP ${response.status}`)
       }
 
       const blob = await response.blob()

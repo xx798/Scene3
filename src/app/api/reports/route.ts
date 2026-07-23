@@ -49,8 +49,11 @@ export async function DELETE(request: NextRequest) {
 
     if (deleteError) throw deleteError
 
-    // 删除物理文件
-    const reportsDir = path.join(process.cwd(), "public", "reports")
+    // 删除物理文件（根据环境选择路径）
+    const isProd = process.env.COZE_PROJECT_ENV === "PROD"
+    const reportsDir = isProd
+      ? path.join("/tmp", "reports")
+      : path.join(process.cwd(), "public", "reports")
     const filePath = path.join(reportsDir, report.file_name)
     if (fs.existsSync(filePath)) {
       fs.unlinkSync(filePath)
