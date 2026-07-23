@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Download, FileSpreadsheet, CalendarIcon, Loader2, AlertCircle } from "lucide-react"
+import { Download, FileSpreadsheet, CalendarIcon, Loader2, AlertCircle, Trash2 } from "lucide-react"
 import { format } from "date-fns"
 import { cn } from "@/lib/utils"
 
@@ -24,6 +24,7 @@ export default function ReportsPage() {
   const [reports, setReports] = useState<DailyReport[]>([])
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date())
   const [generating, setGenerating] = useState(false)
+  const [deletingId, setDeletingId] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
 
@@ -74,18 +75,20 @@ export default function ReportsPage() {
   const handleDownload = async (report: DailyReport) => {
     if (!report.excel_url) return
 
-    // 如果是相对路径，直接下载
-    if (report.excel_url.startsWith("/")) {
-      const link = document.createElement("a")
-      link.href = report.excel_url
-      link.download = report.file_name
-      link.click()
-      return
-    }
+    // 统一使用相对路径下载
+    const url = report.excel_url.startsWith("/")
+      ? report.excel_url
+      : new URL(report.excel_url).pathname
 
-    // 如果是外部 URL，使用 fetch + blob
     try {
-      const response = await fetch(report.excel_url)
+      const response = await fetch(url)
+      if (!response.ok) throw new Error(`下载失败: HTTP ${response.status}`)
+
+      const contentType = response.headers.get("content-type") || ""
+      if (contentType.includes("text/html")) {
+        throw new Error("服务器返回了 HTML 页面，文件可能不存在")
+      }
+
       const blob = await response.blob()
       const blobUrl = window.URL.createObjectURL(blob)
       const link = document.createElement("a")
@@ -93,8 +96,35 @@ export default function ReportsPage() {
       link.download = report.file_name
       link.click()
       window.URL.revokeObjectURL(blobUrl)
-    } catch {
-      window.open(report.excel_url, "_blank")
+    } catch (error) {
+      console.error("下载报告失败:", error)
+      setMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : "下载失败，请重试",
+      })
+    }
+  }
+
+  const handleDelete = async (report: DailyReport) => {
+    if (!confirm(`确定删除 ${report.report_date} 的报告吗？`)) return
+
+    setDeletingId(report.id)
+    setMessage(null)
+
+    try {
+      const res = await fetch(`/api/reports?id=${report.id}`, { method: "DELETE" })
+      const data = await res.json()
+
+      if (data.success) {
+        setMessage({ type: "success", text: `${report.report_date} 报告已删除` })
+        fetchReports()
+      } else {
+        setMessage({ type: "error", text: data.error || "删除失败" })
+      }
+    } catch (error) {
+      setMessage({ type: "error", text: "删除失败，请重试" })
+    } finally {
+      setDeletingId(null)
     }
   }
 
@@ -214,16 +244,32 @@ export default function ReportsPage() {
                       </p>
                     </div>
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="gap-2"
-                    onClick={() => handleDownload(report)}
-                    disabled={!report.excel_url}
-                  >
-                    <Download className="h-4 w-4" />
-                    下载
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-2"
+                      onClick={() => handleDownload(report)}
+                      disabled={!report.excel_url}
+                    >
+                      <Download className="h-4 w-4" />
+                      下载
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-2 text-rose-500 hover:text-rose-600 hover:bg-rose-50"
+                      onClick={() => handleDelete(report)}
+                      disabled={deletingId === report.id}
+                    >
+                      {deletingId === report.id ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-4 w-4" />
+                      )}
+                      删除
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>

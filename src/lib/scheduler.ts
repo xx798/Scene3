@@ -17,29 +17,238 @@ interface TaskConfig {
 const jobs = new Map<number, CronJob>()
 
 /**
- * 解析智能体/工作流返回的诊断结果 JSON
+ * 从文本中提取所有 markdown 代码块的内容
  */
-function parseDiagnosisJSON(text: string): Record<string, unknown> | null {
-  if (!text) return null
+function extractCodeBlocks(text: string): string[] {
+  const blocks: string[] = []
+  const regex = /```(?:json)?\s*\n?([\s\S]*?)\n?```/g
+  let match: RegExpExecArray | null
+  while ((match = regex.exec(text)) !== null) {
+    const content = match[1].trim()
+    if (content) blocks.push(content)
+  }
+  return blocks
+}
 
-  // 尝试提取 markdown 代码块中的 JSON
-  const codeBlockMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/)
-  const jsonStr = codeBlockMatch ? codeBlockMatch[1].trim() : text.trim()
+/**
+ * 用花括号配对法从文本中逐个提取完整的 JSON 对象
+ */
+function extractBraceObjects(text: string): string[] {
+  const objects: string[] = []
+  let depth = 0
+  let start = -1
 
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]
+    // 跳过字符串内的花括号
+    if (ch === '"' && (i === 0 || text[i - 1] !== "\\")) {
+      // 跳过整个字符串
+      i++
+      while (i < text.length) {
+        if (text[i] === '"' && text[i - 1] !== "\\") break
+        i++
+      }
+      continue
+    }
+    if (ch === "{") {
+      if (depth === 0) start = i
+      depth++
+    } else if (ch === "}") {
+      depth--
+      if (depth === 0 && start !== -1) {
+        objects.push(text.substring(start, i + 1))
+        start = -1
+      }
+    }
+  }
+  return objects
+}
+
+/**
+ * 尝试解析单个 JSON 字符串，失败返回 null
+ */
+function tryParseJSON(str: string): Record<string, unknown> | null {
   try {
-    const parsed = JSON.parse(jsonStr)
+    const parsed = JSON.parse(str)
+    if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * 从对象中提取诊断数组（检查常见嵌套字段名）
+ * 只有当数组元素包含诊断特征字段（camera_id / site_name_watermark / camera_status）时才返回，
+ * 避免将 risk_items 等非诊断数组误识别为诊断列表
+ */
+function isDiagnosisObject(obj: unknown): boolean {
+  if (typeof obj !== "object" || obj === null) return false
+  const record = obj as Record<string, unknown>
+  return "camera_id" in record || "site_name_watermark" in record || "camera_status" in record
+}
+
+function extractArrayFromObject(obj: Record<string, unknown>): Record<string, unknown>[] | null {
+  const arrayKeys = ["results", "devices", "data", "items", "cameras", "diagnoses", "records", "list"]
+  for (const key of arrayKeys) {
+    const val = obj[key]
+    if (Array.isArray(val) && val.length > 0 && isDiagnosisObject(val[0])) {
+      return val as Record<string, unknown>[]
+    }
+  }
+  // 遍历所有字段，找到第一个诊断对象数组
+  for (const val of Object.values(obj)) {
+    if (Array.isArray(val) && val.length > 1 && isDiagnosisObject(val[0])) {
+      return val as Record<string, unknown>[]
+    }
+  }
+  return null
+}
+
+/**
+ * 解析智能体/工作流返回的诊断结果，支持单设备和多设备格式
+ * 返回诊断对象数组（至少包含 1 个元素，解析失败返回空数组）
+ *
+ * 支持的格式：
+ * 1. 多个 markdown 代码块，每个包含一个 JSON 对象
+ * 2. 标准 JSON 数组 [{...}, {...}]
+ * 3. 对象内含数组字段 {"results": [{...}, {...}]}
+ * 4. 多个 JSON 对象直接拼接 {...} {...}
+ * 5. 单个 JSON 对象 {...}
+ */
+function parseDiagnosisList(text: string): Record<string, unknown>[] {
+  if (!text) return []
+
+  // 优先级1：提取所有 markdown 代码块
+  const codeBlocks = extractCodeBlocks(text)
+  if (codeBlocks.length > 1) {
+    // 多个代码块 → 逐个解析
+    const results: Record<string, unknown>[] = []
+    for (const block of codeBlocks) {
+      // 代码块内可能是数组
+      try {
+        const parsed = JSON.parse(block)
+        if (Array.isArray(parsed)) {
+          for (const item of parsed) {
+            if (typeof item === "object" && item !== null) {
+              results.push(item as Record<string, unknown>)
+            }
+          }
+        } else if (typeof parsed === "object" && parsed !== null) {
+          results.push(parsed as Record<string, unknown>)
+        }
+      } catch {
+        const obj = tryParseJSON(block)
+        if (obj) results.push(obj)
+      }
+    }
+    if (results.length > 0) return results
+  }
+
+  // 优先级2：尝试直接 JSON.parse（可能是数组或单个对象）
+  const trimmed = text.trim()
+  try {
+    const parsed = JSON.parse(trimmed)
+    if (Array.isArray(parsed)) {
+      return parsed.filter(
+        (item: unknown): item is Record<string, unknown> =>
+          typeof item === "object" && item !== null
+      )
+    }
     if (typeof parsed === "object" && parsed !== null) {
-      return parsed
+      // 检查是否是嵌套结构（如 {output: "JSON字符串"}）
+      const nested = extractNestedJSON(parsed as Record<string, unknown>)
+      if (nested) {
+        if (Array.isArray(nested)) return nested
+        const arr = extractArrayFromObject(nested)
+        if (arr) return arr
+        return [nested]
+      }
+      // 检查对象内是否嵌套数组
+      const nestedArr = extractArrayFromObject(parsed as Record<string, unknown>)
+      if (nestedArr) return nestedArr
+      // 单个对象
+      return [parsed as Record<string, unknown>]
     }
   } catch {
-    // 尝试找到第一个 { 到最后一个 } 之间的内容
-    const firstBrace = text.indexOf("{")
-    const lastBrace = text.lastIndexOf("}")
-    if (firstBrace !== -1 && lastBrace > firstBrace) {
+    // 不是合法 JSON，继续尝试其他方式
+  }
+
+  // 优先级3：单个代码块的情况
+  if (codeBlocks.length === 1) {
+    const obj = tryParseJSON(codeBlocks[0])
+    if (obj) {
+      const nested = extractArrayFromObject(obj)
+      if (nested) return nested
+      return [obj]
+    }
+  }
+
+  // 优先级4：花括号配对法提取多个对象
+  const braceObjects = extractBraceObjects(trimmed)
+  if (braceObjects.length > 1) {
+    const results: Record<string, unknown>[] = []
+    for (const objStr of braceObjects) {
+      const obj = tryParseJSON(objStr)
+      if (obj) results.push(obj)
+    }
+    if (results.length > 0) return results
+  }
+
+  // 优先级5：降级 — 取第一个 { 到最后一个 } 之间的内容
+  const firstBrace = trimmed.indexOf("{")
+  const lastBrace = trimmed.lastIndexOf("}")
+  if (firstBrace !== -1 && lastBrace > firstBrace) {
+    const obj = tryParseJSON(trimmed.substring(firstBrace, lastBrace + 1))
+    if (obj) {
+      const nested = extractArrayFromObject(obj)
+      if (nested) return nested
+      return [obj]
+    }
+  }
+
+  return []
+}
+
+/**
+ * 清理 JSON 字符串中的模板残留（如 {{}}、{{xxx}}）
+ */
+function cleanJSONString(str: string): string {
+  // 移除 {{}} 和 {{...}} 等模板标记
+  return str.replace(/\{\{[^}]*\}\}/g, "").replace(/\{\{\}\}/g, "")
+}
+
+/**
+ * 尝试从对象的 output/data/result 等字段中提取嵌套的 JSON 字符串并解析
+ * 返回单个对象或对象数组（当嵌套内容包含多个拼接的 JSON 对象时）
+ */
+function extractNestedJSON(
+  obj: Record<string, unknown>
+): Record<string, unknown> | Record<string, unknown>[] | null {
+  const fieldsToCheck = ["output", "data", "result", "content", "response"]
+  for (const field of fieldsToCheck) {
+    const value = obj[field]
+    if (typeof value === "string" && value.trim().startsWith("{")) {
+      const cleaned = cleanJSONString(value)
+      // 先尝试直接解析为单个 JSON
       try {
-        return JSON.parse(text.substring(firstBrace, lastBrace + 1))
+        const parsed = JSON.parse(cleaned)
+        if (typeof parsed === "object" && parsed !== null) {
+          return parsed as Record<string, unknown>
+        }
       } catch {
-        // ignore
+        // 不是单个 JSON，尝试用花括号配对法提取多个对象
+        const multiObjects = extractBraceObjects(cleaned)
+        if (multiObjects.length > 0) {
+          const results: Record<string, unknown>[] = []
+          for (const objStr of multiObjects) {
+            const parsed = tryParseJSON(objStr)
+            if (parsed) results.push(parsed)
+          }
+          if (results.length > 0) return results
+        }
       }
     }
   }
@@ -47,9 +256,41 @@ function parseDiagnosisJSON(text: string): Record<string, unknown> | null {
 }
 
 /**
+ * 解析 capture_time，处理各种格式（包括无效格式）
+ */
+function parseCaptureTime(value: unknown): string {
+  const now = new Date().toISOString()
+  if (!value || typeof value !== "string") return now
+
+  const str = value.trim()
+  // 跳过明显无效的值
+  if (!str || str === "无" || str === "null" || str === "undefined") return now
+
+  // 尝试解析为时间戳（纯数字）
+  if (/^\d{10,13}$/.test(str)) {
+    const ts = str.length === 10 ? parseInt(str) * 1000 : parseInt(str)
+    const date = new Date(ts)
+    if (!isNaN(date.getTime())) return date.toISOString()
+  }
+
+  // 尝试标准日期格式
+  const date = new Date(str)
+  if (!isNaN(date.getTime())) return date.toISOString()
+
+  // 无法解析，返回当前时间
+  return now
+}
+
+/**
  * 将诊断结果保存到 daily_diagnose_data 表
  */
 async function saveDiagnosisResult(data: Record<string, unknown>): Promise<void> {
+  // 跳过没有有效诊断数据的空对象
+  if (!data.camera_id && !data.camera_status && (!Array.isArray(data.risk_items) || data.risk_items.length === 0)) {
+    console.log("[scheduler] 跳过空诊断记录:", JSON.stringify(data).substring(0, 200))
+    return
+  }
+
   const supabase = getSupabaseClient()
   const riskItems = Array.isArray(data.risk_items) ? data.risk_items : []
 
@@ -66,11 +307,7 @@ async function saveDiagnosisResult(data: Record<string, unknown>): Promise<void>
     camera_status: (data.camera_status as string) || "正常",
     camera_abnormal_desc: (data.camera_abnormal_desc as string) || "正常",
     risk_items: riskItems,
-    capture_time: data.capture_time
-      ? new Date(data.capture_time as string).toISOString()
-      : new Date().toISOString(),
-    image_url: (data.image_url as string) || "",
-    excel_url: (data.Excel_url as string) || (data.excel_url as string) || "",
+    capture_time: parseCaptureTime(data.capture_time),
     status,
   })
 }
@@ -116,12 +353,18 @@ async function callCozeBot(botId: string, message: string): Promise<string> {
 
   const result = await response.json()
 
-  if (result.data && result.data.length > 0) {
-    const chatId = result.data[0].id
-    const conversationId = result.data[0].conversation_id
+  if (!response.ok) {
+    throw new Error(`Bot 调用失败: HTTP ${response.status}, ${JSON.stringify(result)}`)
+  }
 
-    // 轮询获取结果
-    for (let i = 0; i < 60; i++) {
+  // 兼容 data 为数组或对象两种格式
+  const chatData = Array.isArray(result.data) ? result.data[0] : result.data
+  if (chatData && chatData.id) {
+    const chatId = chatData.id
+    const conversationId = chatData.conversation_id
+
+    // 轮询获取结果（最多 6 分钟）
+    for (let i = 0; i < 180; i++) {
       await new Promise((r) => setTimeout(r, 2000))
 
       const retrieveRes = await fetch(`${baseUrl}/v3/chat/retrieve?chat_id=${chatId}&conversation_id=${conversationId}`, {
@@ -146,7 +389,7 @@ async function callCozeBot(botId: string, message: string): Promise<string> {
 }
 
 /**
- * 调用扣子工作流 API
+ * 调用扣子工作流流式 API（stream_run），收集输出节点的完整内容
  */
 async function callCozeWorkflow(
   workflowId: string,
@@ -155,28 +398,119 @@ async function callCozeWorkflow(
   const token = process.env.COZE_WORKLOAD_API_TOKEN
   const baseUrl = process.env.COZE_API_BASE_URL || "https://api.coze.cn"
 
-  const response = await fetch(`${baseUrl}/v1/workflow/run`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      workflow_id: workflowId,
-      parameters,
-    }),
-  })
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 360000) // 6 分钟超时
 
-  const result = await response.json()
+  try {
+    const response = await fetch(`${baseUrl}/v1/workflow/stream_run`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        workflow_id: workflowId,
+        parameters,
+      }),
+      signal: controller.signal,
+    })
 
-  if (result.data) {
-    try {
-      return JSON.parse(result.data)
-    } catch {
-      return { output: result.data }
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(`工作流调用失败: HTTP ${response.status}, ${errorText}`)
     }
+
+    if (!response.body) {
+      throw new Error("工作流返回无响应体")
+    }
+
+    // 解析 SSE 流，收集输出节点的 content
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let outputContent = ""
+    let buffer = ""
+    let hasError = ""
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split("\n")
+      buffer = lines.pop() || "" // 保留未完成的行
+
+      for (const line of lines) {
+        if (!line.startsWith("data:")) continue
+        const jsonStr = line.slice(5).trim()
+        if (!jsonStr || jsonStr === "[DONE]") continue
+
+        try {
+          const event = JSON.parse(jsonStr)
+
+          // 收集错误信息
+          if (event.error_code) {
+            hasError = `error_code=${event.error_code}, msg=${event.error_message || "未知错误"}`
+          }
+
+          // 收集输出节点的内容（node_type=Message 且有 content）
+          // 过滤掉空内容 {} 和中间节点的无效输出
+          if (event.content && event.node_type === "Message") {
+            const content = event.content.trim()
+            // 跳过空对象 {} 或纯空白内容
+            if (content && content !== "{}" && content.length > 2) {
+              outputContent += content
+            }
+          }
+        } catch {
+          // 忽略解析失败的行
+        }
+      }
+    }
+
+    // 如果有错误且没有输出内容，抛出错误
+    if (hasError && !outputContent) {
+      throw new Error(`工作流调用失败: ${hasError}`)
+    }
+
+    // 尝试解析输出内容为 JSON
+    if (outputContent) {
+      try {
+        return JSON.parse(outputContent)
+      } catch {
+        // 输出不是合法 JSON，尝试提取多个拼接的 JSON 对象
+        const cleaned = cleanJSONString(outputContent)
+        const objects = extractBraceObjects(cleaned)
+        if (objects.length > 0) {
+          const results: Record<string, unknown>[] = []
+          for (const objStr of objects) {
+            try {
+              const parsed = JSON.parse(objStr)
+              if (typeof parsed === "object" && parsed !== null) {
+                results.push(parsed)
+              }
+            } catch {
+              // 忽略无法解析的对象
+            }
+          }
+          if (results.length > 0) {
+            return results.length === 1 ? results[0] : { results }
+          }
+        }
+        // 无法提取有效对象，包装返回
+        return { output: outputContent }
+      }
+    }
+
+    // 无输出内容
+    return {}
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new Error("工作流调用超时（6分钟）")
+    }
+    throw error
+  } finally {
+    clearTimeout(timeoutId)
   }
-  throw new Error(result.msg || "工作流调用失败")
 }
 
 /**
@@ -194,9 +528,9 @@ async function executeDiagnosisTask(task: TaskConfig): Promise<{
       )
       const fullText = await callCozeBot(task.bot_id, message)
 
-      // 解析并保存诊断结果
-      const diagnosis = parseDiagnosisJSON(fullText)
-      if (diagnosis) {
+      // 解析诊断结果（支持单设备和多设备）
+      const diagnosisList = parseDiagnosisList(fullText)
+      for (const diagnosis of diagnosisList) {
         await saveDiagnosisResult(diagnosis)
       }
 
@@ -216,30 +550,24 @@ async function executeDiagnosisTask(task: TaskConfig): Promise<{
       const data = await callCozeWorkflow(task.workflow_id, params)
       const fullText = JSON.stringify(data)
 
-      // 尝试从工作流输出中提取诊断结果
-      let diagnosisData: Record<string, unknown> | null = null
+      // 尝试从工作流输出中提取诊断结果（支持多设备）
+      let diagnosisList: Record<string, unknown>[] = []
 
       if (data.body && typeof data.body === "string") {
-        diagnosisData = parseDiagnosisJSON(data.body)
+        diagnosisList = parseDiagnosisList(data.body)
       } else if (data.inspection_result && typeof data.inspection_result === "string") {
-        diagnosisData = parseDiagnosisJSON(data.inspection_result)
+        diagnosisList = parseDiagnosisList(data.inspection_result)
       } else {
-        diagnosisData = parseDiagnosisJSON(fullText)
+        diagnosisList = parseDiagnosisList(fullText)
       }
 
-      // 补充工作流输出中的字段
-      if (diagnosisData) {
+      // 逐条补充工作流字段并入库
+      for (const diagnosisData of diagnosisList) {
         if (!diagnosisData.camera_id && data.serial) {
           diagnosisData.camera_id = data.serial
         }
-        if (!diagnosisData.image_url && data.image_url) {
-          diagnosisData.image_url = data.image_url
-        }
         if (!diagnosisData.capture_time && data.capture_time) {
           diagnosisData.capture_time = data.capture_time
-        }
-        if (!diagnosisData.excel_url && data.URL) {
-          diagnosisData.excel_url = data.URL
         }
         await saveDiagnosisResult(diagnosisData)
       }

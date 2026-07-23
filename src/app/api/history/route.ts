@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
 
     const { data, error } = await client
       .from('daily_diagnose_data')
-      .select('id, diagnose_time, camera_id, site_name_watermark, camera_status, camera_abnormal_desc, risk_items, capture_time, image_url, excel_url, status')
+      .select('id, diagnose_time, camera_id, site_name_watermark, camera_status, camera_abnormal_desc, risk_items, capture_time, status')
       .gte('diagnose_time', dayStart.toISOString())
       .lte('diagnose_time', dayEnd.toISOString())
       .order('diagnose_time', { ascending: false });

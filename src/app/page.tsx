@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { Activity, AlertTriangle, CheckCircle2, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { subscribeDiagnosisInsert } from '@/lib/browser-supabase-client';
 
 interface DashboardStats {
   total: number;
@@ -70,8 +71,32 @@ export default function DashboardPage() {
     }
   }, []);
 
+  const cleanupRef = useRef<(() => void) | null>(null);
+
   useEffect(() => {
     fetchStats();
+
+    // 订阅数据库 INSERT 事件，新诊断记录写入后自动刷新
+    let cancelled = false;
+    subscribeDiagnosisInsert(() => {
+      if (!cancelled) fetchStats();
+    }).then((unsubscribe) => {
+      if (cancelled) {
+        unsubscribe();
+      } else {
+        cleanupRef.current = unsubscribe;
+      }
+    }).catch(() => {
+      // Realtime 订阅失败时静默处理，页面仍可手动刷新
+    });
+
+    return () => {
+      cancelled = true;
+      if (cleanupRef.current) {
+        cleanupRef.current();
+        cleanupRef.current = null;
+      }
+    };
   }, [fetchStats]);
 
   const today = new Date().toLocaleDateString('zh-CN', {

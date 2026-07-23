@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
-import { Calendar, Search, Loader2, Image as ImageIcon, ExternalLink, ChevronDown, ChevronUp, Video, MapPin } from 'lucide-react';
+import { useEffect, useState, useCallback, useRef } from 'react';
+import { Calendar, Search, Loader2, Image as ImageIcon, ChevronDown, ChevronUp, Video, MapPin } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { subscribeDiagnosisInsert } from '@/lib/browser-supabase-client';
 
 interface RiskItem {
   item_name: string;
@@ -19,25 +20,44 @@ interface DiagnoseRecord {
   camera_abnormal_desc: string;
   risk_items: RiskItem[];
   capture_time: string;
-  image_url: string;
-  excel_url: string;
   status: string;
 }
 
 function RiskItemBadge({ item }: { item: RiskItem }) {
-  const statusConfig: Record<string, { bg: string; text: string; label: string }> = {
-    '正常': { bg: 'bg-emerald-50', text: 'text-emerald-600', label: '正常' },
-    '异常': { bg: 'bg-rose-50', text: 'text-rose-600', label: '异常' },
-    '无法识别': { bg: 'bg-amber-50', text: 'text-amber-600', label: '无法识别' },
+  const [expanded, setExpanded] = useState(false);
+  const statusConfig: Record<string, { bg: string; text: string; label: string; descColor: string }> = {
+    '正常': { bg: 'bg-emerald-50', text: 'text-emerald-600', label: '正常', descColor: 'text-emerald-600' },
+    '异常': { bg: 'bg-rose-50', text: 'text-rose-600', label: '异常', descColor: 'text-rose-600' },
+    '无法识别': { bg: 'bg-amber-50', text: 'text-amber-600', label: '无法识别', descColor: 'text-amber-600' },
   };
   const config = statusConfig[item.status] || statusConfig['无法识别'];
+  const hasDesc = item.risk_desc && item.risk_desc.trim() !== '';
 
   return (
-    <div className="flex items-center justify-between gap-2 rounded-lg border border-border px-3 py-2 text-xs">
-      <span className="font-medium text-foreground">{item.item_name}</span>
-      <span className={cn('shrink-0 rounded-full px-2 py-0.5 font-medium', config.bg, config.text)}>
-        {config.label}
-      </span>
+    <div className="rounded-lg border border-border overflow-hidden">
+      <button
+        type="button"
+        onClick={() => hasDesc && setExpanded(!expanded)}
+        className={cn(
+          "flex items-center justify-between gap-2 w-full px-3 py-2 text-xs transition-colors",
+          hasDesc && "cursor-pointer hover:bg-muted/50"
+        )}
+      >
+        <span className={cn('font-medium', config.descColor)}>{item.item_name}</span>
+        <div className="flex items-center gap-1.5">
+          <span className={cn('shrink-0 rounded-full px-2 py-0.5 font-medium', config.bg, config.text)}>
+            {config.label}
+          </span>
+          {hasDesc && (
+            expanded ? <ChevronUp className="h-3 w-3 text-muted-foreground" /> : <ChevronDown className="h-3 w-3 text-muted-foreground" />
+          )}
+        </div>
+      </button>
+      {expanded && hasDesc && (
+        <div className={cn('px-3 pb-2 pt-0.5 text-[11px] leading-tight border-t border-border', config.descColor)}>
+          {item.risk_desc}
+        </div>
+      )}
     </div>
   );
 }
@@ -113,32 +133,9 @@ function RecordDetail({ record }: { record: DiagnoseRecord }) {
             </p>
             <div className="grid gap-1.5 sm:grid-cols-2">
               {riskItems.map((item, idx) => (
-                <div key={idx} className="relative">
-                  <RiskItemBadge item={item} />
-                  {item.risk_desc && (
-                    <p className="mt-0.5 px-3 text-[11px] text-rose-500 leading-tight">{item.risk_desc}</p>
-                  )}
-                </div>
+                <RiskItemBadge key={idx} item={item} />
               ))}
             </div>
-          </div>
-
-          {/* Image preview */}
-          <div className="flex items-center gap-3">
-            <img
-              src={record.image_url}
-              alt="诊断图片"
-              className="h-16 w-16 rounded-lg border border-border object-cover"
-            />
-            <a
-              href={record.image_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1 text-xs text-sky-500 hover:underline"
-            >
-              <ExternalLink className="h-3 w-3" />
-              查看原图
-            </a>
           </div>
         </div>
       )}
@@ -168,8 +165,32 @@ export default function HistoryPage() {
     }
   }, []);
 
+  const cleanupRef = useRef<(() => void) | null>(null);
+
   useEffect(() => {
     fetchRecords(selectedDate);
+
+    // 订阅数据库 INSERT 事件，新诊断记录写入后自动刷新当前日期的列表
+    let cancelled = false;
+    subscribeDiagnosisInsert(() => {
+      if (!cancelled) fetchRecords(selectedDate);
+    }).then((unsubscribe) => {
+      if (cancelled) {
+        unsubscribe();
+      } else {
+        cleanupRef.current = unsubscribe;
+      }
+    }).catch(() => {
+      // Realtime 订阅失败时静默处理
+    });
+
+    return () => {
+      cancelled = true;
+      if (cleanupRef.current) {
+        cleanupRef.current();
+        cleanupRef.current = null;
+      }
+    };
   }, [selectedDate, fetchRecords]);
 
   const formatTime = (dateStr: string) => {
@@ -228,9 +249,6 @@ export default function HistoryPage() {
                 摄像头 / 场地
               </th>
               <th className="px-6 py-3.5 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                图片
-              </th>
-              <th className="px-6 py-3.5 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 设备状态
               </th>
               <th className="px-6 py-3.5 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
@@ -244,14 +262,14 @@ export default function HistoryPage() {
           <tbody className="divide-y divide-border">
             {loading ? (
               <tr>
-                <td colSpan={6} className="px-6 py-12 text-center">
+                <td colSpan={5} className="px-6 py-12 text-center">
                   <Loader2 className="mx-auto h-5 w-5 animate-spin text-sky-500" />
                   <p className="mt-2 text-sm text-muted-foreground">加载中...</p>
                 </td>
               </tr>
             ) : records.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-6 py-12 text-center">
+                <td colSpan={5} className="px-6 py-12 text-center">
                   <ImageIcon className="mx-auto h-8 w-8 text-muted-foreground/40" />
                   <p className="mt-2 text-sm text-muted-foreground">当日暂无诊断记录</p>
                 </td>
@@ -305,23 +323,6 @@ function RecordRow({
           </div>
         </td>
         <td className="px-6 py-4">
-          <div className="group relative inline-block">
-            <img
-              src={record.image_url}
-              alt="诊断图片"
-              className="h-10 w-10 rounded-lg border border-border object-cover transition-transform group-hover:scale-110"
-            />
-            <a
-              href={record.image_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-sky-500 text-white opacity-0 transition-opacity group-hover:opacity-100"
-            >
-              <ExternalLink className="h-2.5 w-2.5" />
-            </a>
-          </div>
-        </td>
-        <td className="px-6 py-4">
           <span className={cn('inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1', camClass)}>
             {record.camera_status}
           </span>
@@ -348,7 +349,7 @@ function RecordRow({
         </td>
       </tr>
       <tr>
-        <td colSpan={6} className="p-0">
+        <td colSpan={5} className="p-0">
           <RecordDetail record={record} />
         </td>
       </tr>
