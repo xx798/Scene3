@@ -192,8 +192,11 @@ export async function generateDailyExcelReport(reportDate: string): Promise<{
     })
   })
 
-  // 保存文件
-  const reportsDir = path.join(process.cwd(), "public", "reports")
+  // 保存文件（生产环境使用 /tmp，开发环境使用 public/reports）
+  const isProd = process.env.COZE_PROJECT_ENV === "PROD"
+  const reportsDir = isProd
+    ? path.join("/tmp", "reports")
+    : path.join(process.cwd(), "public", "reports")
   if (!fs.existsSync(reportsDir)) {
     fs.mkdirSync(reportsDir, { recursive: true })
   }
@@ -202,7 +205,8 @@ export async function generateDailyExcelReport(reportDate: string): Promise<{
   const filePath = path.join(reportsDir, fileName)
   await workbook.xlsx.writeFile(filePath)
 
-  const url = `/reports/${fileName}`
+  // 生产环境返回 /tmp 路径，开发环境返回 /reports 路径
+  const url = isProd ? `file://${filePath}` : `/reports/${fileName}`
 
   return {
     url,
