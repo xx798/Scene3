@@ -45,9 +45,6 @@ export function Sidebar() {
           );
         })}
       </nav>
-      <div className="border-t border-border px-6 py-4">
-        <p className="text-[11px] text-muted-foreground">v1.0.0</p>
-      </div>
     </aside>
   );
 }
