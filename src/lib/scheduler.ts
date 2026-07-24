@@ -675,9 +675,15 @@ function scheduleTask(task: TaskConfig): void {
   if (!task.is_active) return
 
   try {
-    const job = new CronJob(task.cron_expression, () => {
-      executeTask(task.id).catch(console.error)
-    })
+    const job = new CronJob(
+      task.cron_expression,
+      () => {
+        executeTask(task.id).catch(console.error)
+      },
+      null,
+      false,
+      "Asia/Shanghai"
+    )
     job.start()
     jobs.set(task.id, job)
   } catch (e) {
