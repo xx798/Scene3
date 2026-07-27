@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <script src="https://lf-code-agent.coze.cn/obj/x-ai-cn/cdn/jquery/jquery-3.7.1.min.js"></script>
+  <script src="https://lf-code-agent.coze.cn/obj/x-ai-cn/cdn/lucide/lucide-1.11.0.min.js"></script>
+  <script src="https://lf-code-agent.coze.cn/obj/x-ai-cn/cdn/tailwindcss/tailwindcss-browser-4.2.4.min.js"></script>
+
+  <style type="text/tailwindcss">
+    @theme {
+      /* === 品牌色 === */
+      --color-primary:              #0EA5E9;
+      --color-primary-container:    #E0F2FE;
+      --color-on-primary:           #ffffff;
+      /* === 背景 / 表面 === */
+      --color-background:                 #F8FAFC;
+      --color-surface-container-lowest:   #FFFFFF;
+      --color-surface:                    #FFFFFF;
+      --color-surface-container:          #F1F5F9;
+      --color-surface-container-high:     #E2E8F0;
+      --color-surface-container-highest:  #CBD5E1;
+      /* === 文字 === */
+      --color-on-surface:           #0F172A;
+      --color-on-surface-variant:   #64748B;
+      /* === 功能色 === */
+      --color-success:  #10B981;
+      --color-error:    #F43F5E;
+      --color-warning:  #f59e0b;
+      /* === 边框 === */
+      --color-outline:          #CBD5E1;
+      --color-outline-variant:  #E2E8F0;
+      /* === 圆角 === */
+      --radius-sm:   0.25rem;
+      --radius-md:   0.375rem;
+      --radius-lg:   0.5rem;
+      --radius-xl:   0.625rem;
+      --radius-2xl:  0.75rem;
+      --radius-full: 9999px;
+      /* === 阴影 === */
+      --shadow-card:   0 2px 8px rgba(0,0,0,0.08);
+      --shadow-float:  0 10px 25px rgba(0,0,0,0.10);
+      --shadow-dialog: 0 25px 50px rgba(0,0,0,0.15);
+      /* === 字体 === */
+      --font-sans: "Inter", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    }
+  </style>
+
+  <!-- 图片兜底 -->
+  <script>
+    document.addEventListener('error', function (e) {
+      const img = e.target;
+      if (img.tagName !== 'IMG' || img.dataset.fallback) return;
+      img.dataset.fallback = '1';
+      const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const cat = img.getAttribute('data-category') || '其他';
+      const alt = img.getAttribute('alt') || '';
+      const label = esc(alt.length > 8 ? alt.slice(0, 8) + '…' : alt);
+      const icons = { '人物': '👤', '自然风景': '🏞', '动物': '🐾', '建筑城市': '🏙', '运动体育': '⚽', '交通工具': '🚗', '食物': '🍽', '服饰时尚': '👗', '商业科技': '💼', '游戏娱乐': '🎮', '艺术': '🎨', '其他': '🖼' };
+      const icon = icons[cat] || '🖼';
+      const w = img.width || 400, h = img.height || 300;
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><rect width="100%" height="100%" fill="%23f3f4f6"/><text x="50%" y="45%" text-anchor="middle" font-size="${Math.min(w, h) * 0.18}" dominant-baseline="central">${icon}</text><text x="50%" y="68%" text-anchor="middle" font-size="${Math.min(w, h) * 0.07}" fill="%239ca3af" font-family="system-ui,sans-serif" dominant-baseline="central">${label}</text></svg>`;
+      img.src = 'data:image/svg+xml,' + svg;
+    }, true);
+  </script>
+</head>
+
+<body class="bg-background text-on-surface font-sans">
+
+  <!-- @nav:start 导航组件，不需要的页面则不要复制此段（从 @nav:start 到 @nav:end） -->
+  <header class="bg-surface sticky top-0 z-40 h-16 flex items-center justify-between px-6 border-b border-outline-variant/20">
+    <div class="flex items-center gap-2">
+      <div class="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
+        <i data-lucide="activity" class="w-5 h-5 text-on-primary"></i>
+      </div>
+      <span class="font-bold text-lg text-on-surface">深燃智能诊断</span>
+    </div>
+    <div class="flex items-center gap-3">
+      <div class="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+        <span class="text-sm font-medium text-primary">初</span>
+      </div>
+    </div>
+  </header>
+
+  <div class="flex" style="height: calc(100vh - 4rem)">
+    <aside class="w-60 shrink-0 bg-surface-container-lowest border-r border-outline-variant/20 overflow-y-auto">
+      <div class="p-3 space-y-0.5">
+        <a href="home.html" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-on-surface-variant hover:bg-surface-container hover:text-on-surface font-medium text-sm transition-colors">
+          <i data-lucide="layout-dashboard" class="w-4 h-4"></i>数据概览
+        </a>
+        <a href="history.html" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-on-surface-variant hover:bg-surface-container hover:text-on-surface font-medium text-sm transition-colors">
+          <i data-lucide="history" class="w-4 h-4"></i>诊断记录
+        </a>
+        <a href="reports.html" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-on-surface-variant hover:bg-surface-container hover:text-on-surface font-medium text-sm transition-colors">
+          <i data-lucide="file-text" class="w-4 h-4"></i>报告下载
+        </a>
+        <a href="scheduled-tasks.html" class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-primary/10 text-primary font-medium text-sm" aria-current="page">
+          <i data-lucide="clock" class="w-4 h-4"></i>定时任务
+        </a>
+      </div>
+    </aside>
+
+    <!-- @main-content:start -->
+    <main class="flex-1 min-w-0 overflow-y-auto bg-background p-6">
+
+      <!-- 页面顶部：标题 + 新建按钮 -->
+      <div class="flex items-center justify-between mb-6">
+        <div>
+          <h1 class="text-2xl font-bold text-on-surface">定时任务管理</h1>
+          <p class="text-sm text-on-surface-variant mt-1">管理定时诊断任务的创建、启停、手动触发与日志查看</p>
+        </div>
+        <button id="btn-create-task" class="bg-primary text-on-primary px-4 py-2 rounded-md text-sm font-medium hover:opacity-90 active:scale-[0.98] transition-all inline-flex items-center gap-2">
+          <i data-lucide="plus" class="w-4 h-4"></i>新建任务
+        </button>
+      </div>
+
+      <!-- 任务列表卡片 -->
+      <div class="bg-surface rounded-lg shadow-card overflow-hidden">
+        <!-- 表头 -->
+        <div class="grid grid-cols-[2fr_1fr_1.5fr_1fr_1.5fr_2.5fr] gap-4 px-6 py-3 bg-surface-container text-xs font-semibold text-on-surface-variant uppercase tracking-wide">
+          <span>任务名称</span>
+          <span>类型</span>
+          <span>Cron 表达式</span>
+          <span>状态</span>
+          <span>上次执行时间</span>
+          <span class="text-right">操作</span>
+        </div>
+        <!-- 表体 -->
+        <div id="task-table-body" class="divide-y divide-outline-variant/50">
+
+          <!-- 列表-任务1：施工现场诊断（运行中） -->
+          <div class="task-row grid grid-cols-[2fr_1fr_1.5fr_1fr_1.5fr_2.5fr] gap-4 px-6 py-4 hover:bg-surface-container/50 transition-colors items-center" data-task-id="1" data-is-active="true">
+            <span class="text-sm font-medium text-on-surface">施工现场诊断</span>
+            <span class="inline-flex items-center px-2 py-0.5 rounded-sm text-xs font-medium bg-primary/15 text-primary w-fit">智能体</span>
+            <span class="text-sm font-mono text-on-surface-variant">*/10 * * * *</span>
+            <span class="task-status-badge inline-flex items-center px-2 py-0.5 rounded-sm text-xs font-medium bg-emerald-500 text-white w-fit">
+              <span class="w-1.5 h-1.5 rounded-full bg-white mr-1.5"></span>运行中
+            </span>
+            <span class="text-sm text-on-surface-variant">2025-01-15 10:30:00</span>
+            <div class="flex items-center justify-end gap-2">
+              <!-- 启停切换：运行中 → Pause 图标 -->
+              <button id="btn-toggle-1" class="task-toggle-btn inline-flex items-center justify-center w-8 h-8 rounded-md border border-outline-variant/30 text-on-surface-variant hover:text-rose-500 hover:border-rose-500/30 transition-colors" title="暂停任务">
+                <i data-lucide="pause" class="w-4 h-4"></i>
+              </button>
+              <!-- 手动触发：Zap 图标 -->
+              <button id="btn-trigger-1" class="task-trigger-btn inline-flex items-center justify-center w-8 h-8 rounded-md text-on-surface-variant hover:bg-surface-container hover:text-primary transition-colors" title="手动触发">
+                <i data-lucide="zap" class="w-4 h-4"></i>
+              </button>
+              <!-- 日志 -->
+              <button id="btn-logs-1" class="task-logs-btn inline-flex items-center justify-center w-8 h-8 rounded-md text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-colors" title="执行日志">
+                <i data-lucide="file-text" class="w-4 h-4"></i>
+              </button>
+              <!-- 编辑 -->
+              <button id="btn-edit-1" class="task-edit-btn inline-flex items-center justify-center w-8 h-8 rounded-md text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-colors" title="编辑">
+                <i data-lucide="pencil" class="w-4 h-4"></i>
+              </button>
+              <!-- 删除 -->
+              <button id="btn-delete-1" class="task-delete-btn inline-flex items-center justify-center w-8 h-8 rounded-md text-rose-500 hover:bg-rose-500/10 transition-colors" title="删除">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- 列表-任务2：材料堆场监控（已暂停） -->
+          <div class="task-row grid grid-cols-[2fr_1fr_1.5fr_1fr_1.5fr_2.5fr] gap-4 px-6 py-4 hover:bg-surface-container/50 transition-colors items-center" data-task-id="2" data-is-active="false">
+            <span class="text-sm font-medium text-on-surface">材料堆场监控</span>
+            <span class="inline-flex items-center px-2 py-0.5 rounded-sm text-xs font-medium bg-violet-500/15 text-violet-500 w-fit">工作流</span>
+            <span class="text-sm font-mono text-on-surface-variant">0 * * * *</span>
+            <span class="task-status-badge inline-flex items-center px-2 py-0.5 rounded-sm text-xs font-medium bg-slate-400 text-white w-fit">
+              <span class="w-1.5 h-1.5 rounded-full bg-white mr-1.5"></span>已暂停
+            </span>
+            <span class="text-sm text-on-surface-variant">2025-01-15 09:00:00</span>
+            <div class="flex items-center justify-end gap-2">
+              <!-- 启停切换：已暂停 → Play 图标 -->
+              <button id="btn-toggle-2" class="task-toggle-btn inline-flex items-center justify-center w-8 h-8 rounded-md border border-outline-variant/30 text-on-surface-variant hover:text-emerald-500 hover:border-emerald-500/30 transition-colors" title="恢复任务">
+                <i data-lucide="play" class="w-4 h-4"></i>
+              </button>
+              <!-- 手动触发：Zap 图标 -->
+              <button id="btn-trigger-2" class="task-trigger-btn inline-flex items-center justify-center w-8 h-8 rounded-md text-on-surface-variant hover:bg-surface-container hover:text-primary transition-colors" title="手动触发">
+                <i data-lucide="zap" class="w-4 h-4"></i>
+              </button>
+              <!-- 日志 -->
+              <button id="btn-logs-2" class="task-logs-btn inline-flex items-center justify-center w-8 h-8 rounded-md text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-colors" title="执行日志">
+                <i data-lucide="file-text" class="w-4 h-4"></i>
+              </button>
+              <!-- 编辑 -->
+              <button id="btn-edit-2" class="task-edit-btn inline-flex items-center justify-center w-8 h-8 rounded-md text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-colors" title="编辑">
+                <i data-lucide="pencil" class="w-4 h-4"></i>
+              </button>
+              <!-- 删除 -->
+              <button id="btn-delete-2" class="task-delete-btn inline-flex items-center justify-center w-8 h-8 rounded-md text-rose-500 hover:bg-rose-500/10 transition-colors" title="删除">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- 列表-任务3：安全帽佩戴检测（执行中） -->
+          <div class="task-row grid grid-cols-[2fr_1fr_1.5fr_1fr_1.5fr_2.5fr] gap-4 px-6 py-4 hover:bg-surface-container/50 transition-colors items-center" data-task-id="3" data-is-active="true">
+            <span class="text-sm font-medium text-on-surface">安全帽佩戴检测</span>
+            <span class="inline-flex items-center px-2 py-0.5 rounded-sm text-xs font-medium bg-primary/15 text-primary w-fit">智能体</span>
+            <span class="text-sm font-mono text-on-surface-variant">*/5 * * * *</span>
+            <span class="task-status-badge inline-flex items-center px-2 py-0.5 rounded-sm text-xs font-medium bg-sky-500 text-white w-fit animate-pulse">
+              <span class="w-1.5 h-1.5 rounded-full bg-white mr-1.5"></span>执行中
+            </span>
+            <span class="text-sm text-on-surface-variant">2025-01-15 10:35:00</span>
+            <div class="flex items-center justify-end gap-2">
+              <!-- 启停切换：运行中 → Pause 图标 -->
+              <button id="btn-toggle-3" class="task-toggle-btn inline-flex items-center justify-center w-8 h-8 rounded-md border border-outline-variant/30 text-on-surface-variant hover:text-rose-500 hover:border-rose-500/30 transition-colors" title="暂停任务">
+                <i data-lucide="pause" class="w-4 h-4"></i>
+              </button>
+              <!-- 手动触发：Zap 图标（执行中时禁止重复触发） -->
+              <button id="btn-trigger-3" class="task-trigger-btn inline-flex items-center justify-center w-8 h-8 rounded-md text-on-surface-variant hover:bg-surface-container hover:text-primary transition-colors" title="手动触发">
+                <i data-lucide="zap" class="w-4 h-4"></i>
+              </button>
+              <!-- 日志 -->
+              <button id="btn-logs-3" class="task-logs-btn inline-flex items-center justify-center w-8 h-8 rounded-md text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-colors" title="执行日志">
+                <i data-lucide="file-text" class="w-4 h-4"></i>
+              </button>
+              <!-- 编辑 -->
+              <button id="btn-edit-3" class="task-edit-btn inline-flex items-center justify-center w-8 h-8 rounded-md text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-colors" title="编辑">
+                <i data-lucide="pencil" class="w-4 h-4"></i>
+              </button>
+              <!-- 删除 -->
+              <button id="btn-delete-3" class="task-delete-btn inline-flex items-center justify-center w-8 h-8 rounded-md text-rose-500 hover:bg-rose-500/10 transition-colors" title="删除">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- 列表-任务4：夜间施工巡检（运行中） -->
+          <div class="task-row grid grid-cols-[2fr_1fr_1.5fr_1fr_1.5fr_2.5fr] gap-4 px-6 py-4 hover:bg-surface-container/50 transition-colors items-center" data-task-id="4" data-is-active="true">
+            <span class="text-sm font-medium text-on-surface">夜间施工巡检</span>
+            <span class="inline-flex items-center px-2 py-0.5 rounded-sm text-xs font-medium bg-violet-500/15 text-violet-500 w-fit">工作流</span>
+            <span class="text-sm font-mono text-on-surface-variant">0 22 * * *</span>
+            <span class="task-status-badge inline-flex items-center px-2 py-0.5 rounded-sm text-xs font-medium bg-emerald-500 text-white w-fit">
+              <span class="w-1.5 h-1.5 rounded-full bg-white mr-1.5"></span>运行中
+            </span>
+            <span class="text-sm text-on-surface-variant">2025-01-14 22:00:00</span>
+            <div class="flex items-center justify-end gap-2">
+              <!-- 启停切换：运行中 → Pause 图标 -->
+              <button id="btn-toggle-4" class="task-toggle-btn inline-flex items-center justify-center w-8 h-8 rounded-md border border-outline-variant/30 text-on-surface-variant hover:text-rose-500 hover:border-rose-500/30 transition-colors" title="暂停任务">
+                <i data-lucide="pause" class="w-4 h-4"></i>
+              </button>
+              <!-- 手动触发：Zap 图标 -->
+              <button id="btn-trigger-4" class="task-trigger-btn inline-flex items-center justify-center w-8 h-8 rounded-md text-on-surface-variant hover:bg-surface-container hover:text-primary transition-colors" title="手动触发">
+                <i data-lucide="zap" class="w-4 h-4"></i>
+              </button>
+              <!-- 日志 -->
+              <button id="btn-logs-4" class="task-logs-btn inline-flex items-center justify-center w-8 h-8 rounded-md text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-colors" title="执行日志">
+                <i data-lucide="file-text" class="w-4 h-4"></i>
+              </button>
+              <!-- 编辑 -->
+              <button id="btn-edit-4" class="task-edit-btn inline-flex items-center justify-center w-8 h-8 rounded-md text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-colors" title="编辑">
+                <i data-lucide="pencil" class="w-4 h-4"></i>
+              </button>
+              <!-- 删除 -->
+              <button id="btn-delete-4" class="task-delete-btn inline-flex items-center justify-center w-8 h-8 rounded-md text-rose-500 hover:bg-rose-500/10 transition-colors" title="删除">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- 列表-任务5：塔吊运行状态检测（已暂停） -->
+          <div class="task-row grid grid-cols-[2fr_1fr_1.5fr_1fr_1.5fr_2.5fr] gap-4 px-6 py-4 hover:bg-surface-container/50 transition-colors items-center" data-task-id="5" data-is-active="false">
+            <span class="text-sm font-medium text-on-surface">塔吊运行状态检测</span>
+            <span class="inline-flex items-center px-2 py-0.5 rounded-sm text-xs font-medium bg-primary/15 text-primary w-fit">智能体</span>
+            <span class="text-sm font-mono text-on-surface-variant">*/30 * * * *</span>
+            <span class="task-status-badge inline-flex items-center px-2 py-0.5 rounded-sm text-xs font-medium bg-slate-400 text-white w-fit">
+              <span class="w-1.5 h-1.5 rounded-full bg-white mr-1.5"></span>已暂停
+            </span>
+            <span class="text-sm text-on-surface-variant">2025-01-14 16:00:00</span>
+            <div class="flex items-center justify-end gap-2">
+              <!-- 启停切换：已暂停 → Play 图标 -->
+              <button id="btn-toggle-5" class="task-toggle-btn inline-flex items-center justify-center w-8 h-8 rounded-md border border-outline-variant/30 text-on-surface-variant hover:text-emerald-500 hover:border-emerald-500/30 transition-colors" title="恢复任务">
+                <i data-lucide="play" class="w-4 h-4"></i>
+              </button>
+              <!-- 手动触发：Zap 图标 -->
+              <button id="btn-trigger-5" class="task-trigger-btn inline-flex items-center justify-center w-8 h-8 rounded-md text-on-surface-variant hover:bg-surface-container hover:text-primary transition-colors" title="手动触发">
+                <i data-lucide="zap" class="w-4 h-4"></i>
+              </button>
+              <!-- 日志 -->
+              <button id="btn-logs-5" class="task-logs-btn inline-flex items-center justify-center w-8 h-8 rounded-md text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-colors" title="执行日志">
+                <i data-lucide="file-text" class="w-4 h-4"></i>
+              </button>
+              <!-- 编辑 -->
+              <button id="btn-edit-5" class="task-edit-btn inline-flex items-center justify-center w-8 h-8 rounded-md text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-colors" title="编辑">
+                <i data-lucide="pencil" class="w-4 h-4"></i>
+              </button>
+              <!-- 删除 -->
+              <button id="btn-delete-5" class="task-delete-btn inline-flex items-center justify-center w-8 h-8 rounded-md text-rose-500 hover:bg-rose-500/10 transition-colors" title="删除">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+              </button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ====== 创建/编辑任务 Dialog ====== -->
+      <div id="dialog-task" class="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 hidden">
+        <div class="bg-surface rounded-xl shadow-dialog max-w-lg w-full max-h-[90vh] overflow-y-auto">
+          <!-- Dialog 头部 -->
+          <div class="flex items-center justify-between px-6 py-4 border-b border-outline-variant/20">
+            <h2 id="dialog-task-title" class="text-base font-semibold text-on-surface">新建任务</h2>
+            <button id="btn-close-dialog-task" class="w-8 h-8 inline-flex items-center justify-center rounded-md text-on-surface-variant hover:bg-surface-container transition-colors">
+              <i data-lucide="x" class="w-4 h-4"></i>
+            </button>
+          </div>
+          <!-- Dialog 表单 -->
+          <div class="px-6 py-5 space-y-4">
+            <!-- 任务名称 -->
+            <div>
+              <label for="input-task-name" class="block text-sm font-medium text-on-surface mb-1.5">任务名称</label>
+              <input id="input-task-name" type="text" placeholder="请输入任务名称" class="w-full bg-surface-container border-none rounded-md px-3 py-2 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors" />
+            </div>
+            <!-- 任务类型 -->
+            <div>
+              <label for="select-task-type" class="block text-sm font-medium text-on-surface mb-1.5">任务类型</label>
+              <select id="select-task-type" class="w-full bg-surface-container border-none rounded-md px-3 py-2 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors">
+                <option value="agent">智能体</option>
+                <option value="workflow">工作流</option>
+              </select>
+            </div>
+            <!-- Bot ID / Workflow ID -->
+            <div>
+              <label for="input-task-bot-id" class="block text-sm font-medium text-on-surface mb-1.5">Bot ID / Workflow ID</label>
+              <input id="input-task-bot-id" type="text" placeholder="请输入 Bot ID 或 Workflow ID" class="w-full bg-surface-container border-none rounded-md px-3 py-2 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors" />
+            </div>
+            <!-- Cron 表达式 -->
+            <div>
+              <label for="input-task-cron" class="block text-sm font-medium text-on-surface mb-1.5">Cron 表达式</label>
+              <input id="input-task-cron" type="text" placeholder="*/10 * * * *" class="w-full bg-surface-container border-none rounded-md px-3 py-2 text-sm font-mono text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors" />
+              <!-- 快捷预设按钮 -->
+              <div class="flex flex-wrap gap-2 mt-2">
+                <button type="button" class="cron-preset text-xs px-2.5 py-1 rounded-md bg-surface-container text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-cron="*/5 * * * *">每5分钟</button>
+                <button type="button" class="cron-preset text-xs px-2.5 py-1 rounded-md bg-surface-container text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-cron="*/10 * * * *">每10分钟</button>
+                <button type="button" class="cron-preset text-xs px-2.5 py-1 rounded-md bg-surface-container text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-cron="*/30 * * * *">每30分钟</button>
+                <button type="button" class="cron-preset text-xs px-2.5 py-1 rounded-md bg-surface-container text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-cron="0 * * * *">每小时</button>
+                <button type="button" class="cron-preset text-xs px-2.5 py-1 rounded-md bg-surface-container text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-cron="0 22 * * *">每天22点</button>
+              </div>
+            </div>
+            <!-- 消息模板 / 工作流参数 -->
+            <div>
+              <label for="input-task-template" class="block text-sm font-medium text-on-surface mb-1.5">消息模板 / 工作流参数</label>
+              <textarea id="input-task-template" rows="3" placeholder="请输入消息模板或工作流参数（JSON 格式）" class="w-full bg-surface-container border-none rounded-md px-3 py-2 text-sm text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors resize-none"></textarea>
+            </div>
+          </div>
+          <!-- Dialog 底部按钮 -->
+          <div class="flex items-center justify-end gap-3 px-6 py-4 border-t border-outline-variant/20">
+            <button id="btn-cancel-task" class="bg-surface-container text-on-surface border-none px-4 py-2 rounded-md text-sm font-medium hover:bg-surface-container-high active:scale-[0.98] transition-all">取消</button>
+            <button id="btn-save-task" class="bg-primary text-on-primary px-4 py-2 rounded-md text-sm font-medium hover:opacity-90 active:scale-[0.98] transition-all">创建</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ====== 执行日志 Dialog ====== -->
+      <div id="dialog-logs" class="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 hidden">
+        <div class="bg-surface rounded-xl shadow-dialog max-w-lg w-full max-h-[90vh] overflow-y-auto">
+          <!-- Dialog 头部 -->
+          <div class="flex items-center justify-between px-6 py-4 border-b border-outline-variant/20">
+            <div class="flex items-center gap-2">
+              <h2 class="text-base font-semibold text-on-surface">执行日志</h2>
+              <span id="logs-task-name" class="text-sm text-on-surface-variant"></span>
+            </div>
+            <button id="btn-close-dialog-logs" class="w-8 h-8 inline-flex items-center justify-center rounded-md text-on-surface-variant hover:bg-surface-container transition-colors">
+              <i data-lucide="x" class="w-4 h-4"></i>
+            </button>
+          </div>
+          <!-- 日志列表 -->
+          <div id="logs-list" class="px-6 py-5 space-y-3">
+
+            <!-- 日志-1：成功 -->
+            <div class="bg-surface-container rounded-md p-4">
+              <div class="flex items-start gap-3">
+                <i data-lucide="check-circle-2" class="w-5 h-5 text-emerald-500 shrink-0 mt-0.5"></i>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center justify-between">
+                    <span class="text-sm font-medium text-emerald-600">执行成功</span>
+                    <span class="text-xs text-on-surface-variant">2025-01-15 10:30:00</span>
+                  </div>
+                  <p class="text-xs text-on-surface-variant mt-1">响应摘要：检测到 3 处施工异常，已生成诊断报告 #DR-20250115-1030</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- 日志-2：成功 -->
+            <div class="bg-surface-container rounded-md p-4">
+              <div class="flex items-start gap-3">
+                <i data-lucide="check-circle-2" class="w-5 h-5 text-emerald-500 shrink-0 mt-0.5"></i>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center justify-between">
+                    <span class="text-sm font-medium text-emerald-600">执行成功</span>
+                    <span class="text-xs text-on-surface-variant">2025-01-15 10:20:00</span>
+                  </div>
+                  <p class="text-xs text-on-surface-variant mt-1">响应摘要：施工现场状态正常，未检测到异常项</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- 日志-3：失败 -->
+            <div class="bg-surface-container rounded-md p-4">
+              <div class="flex items-start gap-3">
+                <i data-lucide="x-circle" class="w-5 h-5 text-rose-500 shrink-0 mt-0.5"></i>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center justify-between">
+                    <span class="text-sm font-medium text-rose-600">执行失败</span>
+                    <span class="text-xs text-on-surface-variant">2025-01-15 10:10:00</span>
+                  </div>
+                  <p class="text-xs text-rose-500 mt-1">错误信息：Bot 接口超时，请求在 30s 后未响应</p>
+                  <p class="text-xs text-on-surface-variant mt-0.5">响应摘要：无返回数据，任务将在下个周期重试</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- 日志-4：成功 -->
+            <div class="bg-surface-container rounded-md p-4">
+              <div class="flex items-start gap-3">
+                <i data-lucide="check-circle-2" class="w-5 h-5 text-emerald-500 shrink-0 mt-0.5"></i>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center justify-between">
+                    <span class="text-sm font-medium text-emerald-600">执行成功</span>
+                    <span class="text-xs text-on-surface-variant">2025-01-15 10:00:00</span>
+                  </div>
+                  <p class="text-xs text-on-surface-variant mt-1">响应摘要：检测到 1 处安全隐患，已推送告警通知给项目负责人</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- 日志-5：运行中 -->
+            <div class="bg-surface-container rounded-md p-4">
+              <div class="flex items-start gap-3">
+                <i data-lucide="loader-2" class="w-5 h-5 text-sky-500 shrink-0 mt-0.5 animate-spin"></i>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center justify-between">
+                    <span class="text-sm font-medium text-sky-600">运行中</span>
+                    <span class="text-xs text-on-surface-variant">2025-01-15 10:35:00</span>
+                  </div>
+                  <p class="text-xs text-on-surface-variant mt-1">响应摘要：任务正在执行中，等待 Bot 返回结果...</p>
+                </div>
+              </div>
+            </div>
+
+          </div>
+          <!-- Dialog 底部按钮 -->
+          <div class="flex items-center justify-end gap-3 px-6 py-4 border-t border-outline-variant/20">
+            <button id="btn-close-logs" class="bg-surface-container text-on-surface border-none px-4 py-2 rounded-md text-sm font-medium hover:bg-surface-container-high active:scale-[0.98] transition-all">关闭</button>
+          </div>
+        </div>
+      </div>
+
+    </main>
+    <!-- @main-content:end -->
+  </div>
+  <!-- @nav:end 导航组件，不需要的页面则不要复制此段（从 @nav:start 到 @nav:end） -->
+
+  <script>
+    $(function () {
+      // ========== 新建任务 ==========
+      // 点击"新建任务"按钮 → 打开创建 Dialog，清空表单
+      $('#btn-create-task').on('click', function () {
+        $('#dialog-task-title').text('新建任务');
+        $('#btn-save-task').text('创建');
+        $('#input-task-name').val('');
+        $('#select-task-type').val('agent');
+        $('#input-task-bot-id').val('');
+        $('#input-task-cron').val('');
+        $('#input-task-template').val('');
+        $('#dialog-task').removeClass('hidden');
+      });
+
+      // ========== 编辑任务 ==========
+      // 点击编辑按钮 → 打开编辑 Dialog，预填该行任务数据
+      // 后续实现：
+      // 1. 根据 data-task-id 获取该行数据（任务名称、类型、Cron 等）
+      // 2. 将数据填入 Dialog 表单字段
+      // 3. 保存时调用 PUT /api/scheduled-tasks/[id] 更新任务
+      $('#task-table-body').on('click', '.task-edit-btn', function () {
+        var $row = $(this).closest('.task-row');
+        var taskId = $row.data('task-id');
+        var taskName = $row.find('span').first().text();
+        var taskTypeText = $row.find('span').eq(1).text();
+        var cronExpr = $row.find('.font-mono').text();
+
+        $('#dialog-task-title').text('编辑任务');
+        $('#btn-save-task').text('保存');
+        $('#input-task-name').val(taskName);
+        $('#select-task-type').val(taskTypeText === '工作流' ? 'workflow' : 'agent');
+        $('#input-task-bot-id').val('bot_' + taskId + '_xxxxxx');
+        $('#input-task-cron').val(cronExpr);
+        $('#input-task-template').val('');
+        $('#dialog-task').removeClass('hidden');
+        console.log('编辑任务 ID:', taskId);
+      });
+
+      // ========== 关闭/取消创建编辑 Dialog ==========
+      $('#btn-close-dialog-task').on('click', function () {
+        $('#dialog-task').addClass('hidden');
+      });
+      $('#btn-cancel-task').on('click', function () {
+        $('#dialog-task').addClass('hidden');
+      });
+
+      // ========== 保存任务（创建/编辑） ==========
+      // 后续实现：
+      // 1. 校验必填字段（任务名称、Bot ID、Cron 表达式）
+      // 2. 新建模式调用 POST /api/scheduled-tasks，编辑模式调用 PUT /api/scheduled-tasks/[id]
+      // 3. 成功后关闭 Dialog，刷新任务列表
+      $('#btn-save-task').on('click', function () {
+        var taskName = $('#input-task-name').val().trim();
+        if (!taskName) {
+          $('#input-task-name').focus();
+          return;
+        }
+        console.log('保存任务:', {
+          name: taskName,
+          type: $('#select-task-type').val(),
+          botId: $('#input-task-bot-id').val(),
+          cron: $('#input-task-cron').val(),
+          template: $('#input-task-template').val()
+        });
+        $('#dialog-task').addClass('hidden');
+      });
+
+      // ========== Cron 快捷预设 ==========
+      $('.cron-preset').on('click', function () {
+        var cron = $(this).data('cron');
+        $('#input-task-cron').val(cron);
+      });
+
+      // ========== 启停切换 ==========
+      // 点击启停按钮 → 切换 is_active 状态：
+      // 1. 运行中 → 已暂停：图标从 Pause 变为 Play，hover 从红色变绿色，Badge 从 emerald 变 slate
+      //    同时调用 abortTask 中止正在执行的任务
+      // 2. 已暂停 → 运行中：图标从 Play 变为 Pause，hover 从绿色变红色，Badge 从 slate 变 emerald
+      //    仅恢复 cron 调度，不自动触发执行
+      // 3. 执行中状态不影响启停按钮可用性
+      $('#task-table-body').on('click', '.task-toggle-btn', function () {
+        var $row = $(this).closest('.task-row');
+        var $btn = $(this);
+        var $badge = $row.find('.task-status-badge');
+        var isActive = $row.data('is-active') === true || $row.data('is-active') === 'true';
+
+        if (isActive) {
+          // 运行中 → 暂停
+          $row.data('is-active', false);
+          $btn.attr('title', '恢复任务');
+          $btn.removeClass('hover:text-rose-500 hover:border-rose-500/30')
+              .addClass('hover:text-emerald-500 hover:border-emerald-500/30');
+          $btn.find('i').attr('data-lucide', 'play');
+          $badge.removeClass('bg-emerald-500 animate-pulse bg-sky-500')
+                .addClass('bg-slate-400')
+                .html('<span class="w-1.5 h-1.5 rounded-full bg-white mr-1.5"></span>已暂停');
+          console.log('暂停任务 ID:', $row.data('task-id'), '— 同时中止运行中任务');
+        } else {
+          // 已暂停 → 运行中
+          $row.data('is-active', true);
+          $btn.attr('title', '暂停任务');
+          $btn.removeClass('hover:text-emerald-500 hover:border-emerald-500/30')
+              .addClass('hover:text-rose-500 hover:border-rose-500/30');
+          $btn.find('i').attr('data-lucide', 'pause');
+          $badge.removeClass('bg-slate-400 bg-sky-500 animate-pulse')
+                .addClass('bg-emerald-500')
+                .html('<span class="w-1.5 h-1.5 rounded-full bg-white mr-1.5"></span>运行中');
+          console.log('恢复任务 ID:', $row.data('task-id'), '— 仅恢复 cron 调度');
+        }
+        lucide.createIcons();
+      });
+
+      // ========== 手动触发 ==========
+      // 点击手动触发按钮 → 模拟触发过程：
+      // 1. 按钮图标变为 Loader2 旋转动画
+      // 2. 状态 Badge 变为"执行中"（sky-500 + animate-pulse）
+      // 3. 2秒后恢复原按钮图标，Badge 回到之前状态
+      // 4. 执行中状态时禁止重复点击
+      // 5. 后续调用 POST /api/scheduled-tasks/[id]/trigger，force=true 绕过 is_active 检查
+      $('#task-table-body').on('click', '.task-trigger-btn', function () {
+        var $btn = $(this);
+        var $row = $btn.closest('.task-row');
+        var $badge = $row.find('.task-status-badge');
+        var taskId = $row.data('task-id');
+
+        // 执行中状态禁止重复触发
+        if ($badge.text().indexOf('执行中') !== -1) {
+          console.log('任务正在执行中，禁止重复触发');
+          return;
+        }
+
+        // 保存原始状态
+        var wasActive = $row.data('is-active') === true || $row.data('is-active') === 'true';
+        var originalIcon = $btn.find('i').attr('data-lucide');
+
+        // 按钮变为旋转动画
+        $btn.find('i').attr('data-lucide', 'loader-2').addClass('animate-spin');
+        // Badge 变为执行中
+        $badge.removeClass('bg-emerald-500 bg-slate-400')
+              .addClass('bg-sky-500 animate-pulse')
+              .html('<span class="w-1.5 h-1.5 rounded-full bg-white mr-1.5"></span>执行中');
+        lucide.createIcons();
+
+        console.log('手动触发任务 ID:', taskId, '— force=true 绕过 is_active 检查');
+
+        // 2秒后恢复
+        setTimeout(function () {
+          $btn.find('i').attr('data-lucide', originalIcon).removeClass('animate-spin');
+          if (wasActive) {
+            $badge.removeClass('bg-sky-500 animate-pulse')
+                  .addClass('bg-emerald-500')
+                  .html('<span class="w-1.5 h-1.5 rounded-full bg-white mr-1.5"></span>运行中');
+          } else {
+            $badge.removeClass('bg-sky-500 animate-pulse')
+                  .addClass('bg-slate-400')
+                  .html('<span class="w-1.5 h-1.5 rounded-full bg-white mr-1.5"></span>已暂停');
+          }
+          lucide.createIcons();
+        }, 2000);
+      });
+
+      // ========== 执行日志 ==========
+      // 点击日志按钮 → 打开日志 Dialog，显示该任务的执行日志
+      // 后续调用 GET /api/scheduled-tasks/[id]/logs?limit=20 获取日志数据
+      $('#task-table-body').on('click', '.task-logs-btn', function () {
+        var $row = $(this).closest('.task-row');
+        var taskId = $row.data('task-id');
+        var taskName = $row.find('span').first().text();
+        $('#logs-task-name').text('— ' + taskName);
+        $('#dialog-logs').removeClass('hidden');
+        console.log('查看日志，任务 ID:', taskId);
+      });
+
+      $('#btn-close-dialog-logs').on('click', function () {
+        $('#dialog-logs').addClass('hidden');
+      });
+      $('#btn-close-logs').on('click', function () {
+        $('#dialog-logs').addClass('hidden');
+      });
+
+      // ========== 删除任务 ==========
+      // 点击删除按钮 → confirm 确认后删除该行
+      // 后续调用 DELETE /api/scheduled-tasks/[id]
+      $('#task-table-body').on('click', '.task-delete-btn', function () {
+        var $row = $(this).closest('.task-row');
+        var taskId = $row.data('task-id');
+        var taskName = $row.find('span').first().text();
+        if (confirm('确定要删除任务「' + taskName + '」吗？此操作不可撤销。')) {
+          $row.fadeOut(200, function () {
+            $(this).remove();
+          });
+          console.log('删除任务 ID:', taskId);
+        }
+      });
+
+      // ========== 点击 Dialog 遮罩关闭 ==========
+      $('#dialog-task').on('click', function (e) {
+        if (e.target === this) {
+          $(this).addClass('hidden');
+        }
+      });
+      $('#dialog-logs').on('click', function (e) {
+        if (e.target === this) {
+          $(this).addClass('hidden');
+        }
+      });
+    });
+  </script>
+
+  <script>lucide.createIcons();</script>
+</body>
+
+</html>
