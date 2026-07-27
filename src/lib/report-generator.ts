@@ -1,12 +1,15 @@
 import ExcelJS from "exceljs"
 import path from "path"
 import fs from "fs"
+import sharp from "sharp"
 import { getSupabaseClient } from "@/storage/database/supabase-client"
 
 /**
- * 下载图片并返回 Buffer，失败返回 null
+ * 下载图片，压缩缩放为缩略图后返回 JPEG Buffer
+ * 缩略图尺寸 280x180（2x 屏幕清晰度），JPEG quality 70，单张约 20~50 KB
+ * 失败返回 null
  */
-async function downloadImage(url: string): Promise<Buffer | null> {
+async function downloadAndCompressImage(url: string): Promise<Buffer | null> {
   if (!url) return null
   try {
     const controller = new AbortController()
@@ -15,7 +18,11 @@ async function downloadImage(url: string): Promise<Buffer | null> {
     clearTimeout(timeout)
     if (!response.ok) return null
     const arrayBuffer = await response.arrayBuffer()
-    return Buffer.from(arrayBuffer)
+    const compressed = await sharp(Buffer.from(arrayBuffer))
+      .resize(280, 180, { fit: "cover" })
+      .jpeg({ quality: 70 })
+      .toBuffer()
+    return compressed
   } catch {
     return null
   }
@@ -54,11 +61,11 @@ export async function generateDailyExcelReport(reportDate: string): Promise<{
   const abnormalCount = rows.filter((r: Record<string, unknown>) => r.status === "abnormal").length
   const normalCount = rows.filter((r: Record<string, unknown>) => r.status === "normal").length
 
-  // 预下载所有图片（并行）
+  // 预下载并压缩所有图片（并行）
   const imageBuffers = await Promise.all(
     rows.map((record: Record<string, unknown>) => {
       const imageUrl = record.image_url as string
-      return downloadImage(imageUrl || "")
+      return downloadAndCompressImage(imageUrl || "")
     })
   )
 
@@ -179,8 +186,8 @@ export async function generateDailyExcelReport(reportDate: string): Promise<{
     const imgBuffer = imageBuffers[idx]
     if (imgBuffer) {
       const imageId = workbook.addImage({
-        base64: `data:image/png;base64,${imgBuffer.toString("base64")}`,
-        extension: "png",
+        base64: `data:image/jpeg;base64,${imgBuffer.toString("base64")}`,
+        extension: "jpeg",
       })
       // 图片列是第 10 列（index 9），行号是 idx + 2（第 1 行是表头）
       const colIdx = 9 // 0-based column index for "现场图片"
