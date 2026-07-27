@@ -32,7 +32,7 @@ import {
   Clock,
   Plus,
   Power,
-  Zap,
+  Play,
   Trash2,
   Edit,
   FileText,
@@ -349,7 +349,7 @@ export default function ScheduledTasksPage() {
                         {triggering === task.id ? (
                           <Loader2 className="h-4 w-4 animate-spin" />
                         ) : (
-                          <Zap className="h-4 w-4 hover:text-sky-500 transition-colors" />
+                          <Play className="h-4 w-4" />
                         )}
                       </Button>
                       <Button
