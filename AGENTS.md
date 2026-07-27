@@ -56,7 +56,7 @@
   - `camera_abnormal_desc` (text) - 设备异常详情
   - `risk_items` (jsonb) - 风险检查项数组，每项含 item_name/status/risk_desc
   - `capture_time` (timestamptz) - 水印识别的图片拍摄时间
-  - `image_url` (text) - 图片URL
+  - `image_url` (text) - 现场图片URL
   - `excel_url` (text) - 生成的Excel报告下载链接
   - `status` (varchar: normal/abnormal) - 综合状态
   - `created_at` (timestamptz)

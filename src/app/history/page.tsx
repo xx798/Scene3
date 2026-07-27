@@ -20,6 +20,7 @@ interface DiagnoseRecord {
   camera_abnormal_desc: string;
   risk_items: RiskItem[];
   capture_time: string;
+  image_url: string;
   status: string;
 }
 
@@ -137,6 +138,21 @@ function RecordDetail({ record }: { record: DiagnoseRecord }) {
               ))}
             </div>
           </div>
+
+          {/* Image Preview */}
+          {record.image_url && (
+            <div>
+              <p className="text-xs font-medium text-foreground mb-2">现场图片</p>
+              <div className="rounded-lg border border-border overflow-hidden bg-white inline-block">
+                <img
+                  src={record.image_url}
+                  alt={`${record.site_name_watermark || record.camera_id || '诊断'} 现场图片`}
+                  className="max-h-64 rounded-lg object-contain transition-transform duration-200 hover:scale-[1.02]"
+                  loading="lazy"
+                />
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -255,6 +271,9 @@ export default function HistoryPage() {
                 风险摘要
               </th>
               <th className="px-6 py-3.5 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                现场图片
+              </th>
+              <th className="px-6 py-3.5 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 综合状态
               </th>
             </tr>
@@ -262,14 +281,14 @@ export default function HistoryPage() {
           <tbody className="divide-y divide-border">
             {loading ? (
               <tr>
-                <td colSpan={5} className="px-6 py-12 text-center">
+                <td colSpan={6} className="px-6 py-12 text-center">
                   <Loader2 className="mx-auto h-5 w-5 animate-spin text-sky-500" />
                   <p className="mt-2 text-sm text-muted-foreground">加载中...</p>
                 </td>
               </tr>
             ) : records.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-6 py-12 text-center">
+                <td colSpan={6} className="px-6 py-12 text-center">
                   <ImageIcon className="mx-auto h-8 w-8 text-muted-foreground/40" />
                   <p className="mt-2 text-sm text-muted-foreground">当日暂无诊断记录</p>
                 </td>
@@ -336,6 +355,19 @@ function RecordRow({
           </span>
         </td>
         <td className="px-6 py-4">
+          {record.image_url ? (
+            <img
+              src={record.image_url}
+              alt="现场缩略图"
+              className="h-10 w-14 rounded object-cover border border-border cursor-pointer transition-transform hover:scale-110"
+              loading="lazy"
+              onClick={() => window.open(record.image_url, '_blank')}
+            />
+          ) : (
+            <span className="text-xs text-muted-foreground">无图片</span>
+          )}
+        </td>
+        <td className="px-6 py-4">
           <span
             className={cn(
               'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium',
@@ -349,7 +381,7 @@ function RecordRow({
         </td>
       </tr>
       <tr>
-        <td colSpan={5} className="p-0">
+        <td colSpan={6} className="p-0">
           <RecordDetail record={record} />
         </td>
       </tr>

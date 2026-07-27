@@ -92,6 +92,7 @@ export async function generateDailyExcelReport(reportDate: string): Promise<{
     { header: "拍摄时间", key: "capture_time", width: 20 },
     { header: "综合状态", key: "status", width: 10 },
     { header: "风险项明细", key: "risk_all", width: 60 },
+    { header: "图片URL", key: "image_url", width: 50 },
   ]
 
   detailSheet.getRow(1).eachCell((cell) => {
@@ -129,6 +130,7 @@ export async function generateDailyExcelReport(reportDate: string): Promise<{
         : "",
       status: record.status === "normal" ? "正常" : "异常",
       risk_all: allRisks || "无",
+      image_url: (record.image_url as string) || "",
     })
 
     if (record.status === "abnormal") {

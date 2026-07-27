@@ -16,6 +16,7 @@ export const dailyDiagnoseData = pgTable(
 		camera_abnormal_desc: text("camera_abnormal_desc"),
 		risk_items: jsonb("risk_items"),
 		capture_time: timestamp("capture_time", { withTimezone: true }),
+		image_url: text("image_url"),
 		status: varchar("status", { length: 20 }).notNull().default("normal"),
 		created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},

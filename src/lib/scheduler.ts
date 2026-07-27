@@ -308,6 +308,7 @@ async function saveDiagnosisResult(data: Record<string, unknown>): Promise<void>
     camera_abnormal_desc: (data.camera_abnormal_desc as string) || "正常",
     risk_items: riskItems,
     capture_time: parseCaptureTime(data.capture_time),
+    image_url: (data.image_url as string) || null,
     status,
   })
 }
