@@ -5,9 +5,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Download, FileSpreadsheet, CalendarIcon, Loader2, AlertCircle, Trash2 } from "lucide-react"
+import { Download, FileSpreadsheet, CalendarIcon, Loader2, AlertCircle, Trash2, X, ChevronLeft, ChevronRight } from "lucide-react"
 import { format } from "date-fns"
 import { cn } from "@/lib/utils"
+
+interface DiagnoseImage {
+  image_url: string
+  camera_id: string
+  site_name_watermark: string
+  status: string
+}
 
 interface DailyReport {
   id: number
@@ -18,6 +25,7 @@ interface DailyReport {
   abnormal_count: number
   normal_count: number
   created_at: string
+  diagnose_images: DiagnoseImage[]
 }
 
 export default function ReportsPage() {
@@ -27,6 +35,7 @@ export default function ReportsPage() {
   const [deletingId, setDeletingId] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
+  const [lightbox, setLightbox] = useState<{ images: DiagnoseImage[]; index: number } | null>(null)
 
   const fetchReports = useCallback(async () => {
     try {
@@ -218,56 +227,156 @@ export default function ReportsPage() {
               </p>
             </div>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-3">
               {reports.map((report) => (
                 <div
                   key={report.id}
-                  className="flex items-center justify-between rounded-lg border p-4 transition-colors hover:bg-muted/50"
+                  className="rounded-lg border transition-colors hover:bg-muted/50"
                 >
-                  <div className="flex items-center gap-4">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-                      <FileSpreadsheet className="h-5 w-5 text-primary" />
+                  <div className="flex items-center justify-between p-4">
+                    <div className="flex items-center gap-4">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                        <FileSpreadsheet className="h-5 w-5 text-primary" />
+                      </div>
+                      <div>
+                        <p className="font-medium">{report.file_name}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {report.report_date} · 共 {report.total_count} 条 · 异常{" "}
+                          <span className="text-rose-500 font-medium">{report.abnormal_count}</span> 条
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-medium">{report.file_name}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {report.report_date} · 共 {report.total_count} 条 · 异常{" "}
-                        <span className="text-rose-500 font-medium">{report.abnormal_count}</span> 条
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-2"
+                        onClick={() => handleDownload(report)}
+                        disabled={!report.excel_url}
+                      >
+                        <Download className="h-4 w-4" />
+                        下载
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-2 text-rose-500 hover:text-rose-600 hover:bg-rose-50"
+                        onClick={() => handleDelete(report)}
+                        disabled={deletingId === report.id}
+                      >
+                        {deletingId === report.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-4 w-4" />
+                        )}
+                        删除
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* 诊断图片缩略图 */}
+                  {report.diagnose_images && report.diagnose_images.length > 0 && (
+                    <div className="border-t border-border px-4 py-3">
+                      <p className="text-xs font-medium text-muted-foreground mb-2">
+                        诊断图片 ({report.diagnose_images.length} 张)
                       </p>
+                      <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-thin">
+                        {report.diagnose_images.map((img, idx) => (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={() => setLightbox({ images: report.diagnose_images, index: idx })}
+                            className="group relative shrink-0 rounded-md border border-border overflow-hidden transition-transform hover:scale-105"
+                          >
+                            <img
+                              src={img.image_url}
+                              alt={`${img.camera_id || img.site_name_watermark || '诊断'} 现场图片`}
+                              className="h-16 w-22 object-cover"
+                              loading="lazy"
+                            />
+                            {img.status === "abnormal" && (
+                              <span className="absolute top-0.5 right-0.5 h-2 w-2 rounded-full bg-rose-500 ring-1 ring-white" />
+                            )}
+                            <span className="absolute bottom-0 left-0 right-0 bg-black/50 text-[9px] text-white px-1 py-0.5 truncate">
+                              {img.camera_id || img.site_name_watermark || `#${idx + 1}`}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="gap-2"
-                      onClick={() => handleDownload(report)}
-                      disabled={!report.excel_url}
-                    >
-                      <Download className="h-4 w-4" />
-                      下载
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="gap-2 text-rose-500 hover:text-rose-600 hover:bg-rose-50"
-                      onClick={() => handleDelete(report)}
-                      disabled={deletingId === report.id}
-                    >
-                      {deletingId === report.id ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Trash2 className="h-4 w-4" />
-                      )}
-                      删除
-                    </Button>
-                  </div>
+                  )}
                 </div>
               ))}
             </div>
           )}
         </CardContent>
       </Card>
+
+      {/* 图片预览 Lightbox */}
+      {lightbox && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+          onClick={() => setLightbox(null)}
+        >
+          <button
+            type="button"
+            onClick={() => setLightbox(null)}
+            className="absolute top-4 right-4 rounded-full bg-white/10 p-2 text-white hover:bg-white/20 transition-colors"
+          >
+            <X className="h-5 w-5" />
+          </button>
+
+          {/* 左右切换 */}
+          {lightbox.images.length > 1 && (
+            <>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setLightbox({
+                    ...lightbox,
+                    index: (lightbox.index - 1 + lightbox.images.length) % lightbox.images.length,
+                  })
+                }}
+                className="absolute left-4 rounded-full bg-white/10 p-2 text-white hover:bg-white/20 transition-colors"
+              >
+                <ChevronLeft className="h-6 w-6" />
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setLightbox({
+                    ...lightbox,
+                    index: (lightbox.index + 1) % lightbox.images.length,
+                  })
+                }}
+                className="absolute right-4 rounded-full bg-white/10 p-2 text-white hover:bg-white/20 transition-colors"
+              >
+                <ChevronRight className="h-6 w-6" />
+              </button>
+            </>
+          )}
+
+          <div
+            className="flex flex-col items-center gap-3 max-w-[90vw] max-h-[90vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img
+              src={lightbox.images[lightbox.index].image_url}
+              alt={`${lightbox.images[lightbox.index].camera_id || '诊断'} 现场图片`}
+              className="max-h-[75vh] max-w-full rounded-lg object-contain"
+            />
+            <div className="text-center text-sm text-white/80">
+              <span className="font-medium text-white">
+                {lightbox.images[lightbox.index].camera_id || lightbox.images[lightbox.index].site_name_watermark || `#${lightbox.index + 1}`}
+              </span>
+              <span className="mx-2">·</span>
+              <span>{lightbox.index + 1} / {lightbox.images.length}</span>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
