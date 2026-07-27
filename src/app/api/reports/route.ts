@@ -13,37 +13,7 @@ export async function GET() {
       .limit(30)
 
     if (error) throw error
-    const reports = data || []
-
-    // 批量查询每条报告对应日期的诊断图片
-    const reportsWithImages = await Promise.all(
-      reports.map(async (report: Record<string, unknown>) => {
-        const date = report.report_date as string
-        const startOfDay = `${date}T00:00:00+08:00`
-        const endOfDay = `${date}T23:59:59+08:00`
-
-        const { data: diagnoseData } = await supabase
-          .from("daily_diagnose_data")
-          .select("image_url, camera_id, site_name_watermark, status")
-          .gte("diagnose_time", startOfDay)
-          .lte("diagnose_time", endOfDay)
-          .not("image_url", "is", null)
-          .neq("image_url", "")
-          .order("diagnose_time", { ascending: true })
-
-        return {
-          ...report,
-          diagnose_images: (diagnoseData || []).map((d: Record<string, unknown>) => ({
-            image_url: d.image_url as string,
-            camera_id: d.camera_id as string,
-            site_name_watermark: d.site_name_watermark as string,
-            status: d.status as string,
-          })),
-        }
-      })
-    )
-
-    return NextResponse.json(reportsWithImages)
+    return NextResponse.json(data || [])
   } catch (error) {
     return NextResponse.json({ error: "查询失败" }, { status: 500 })
   }
