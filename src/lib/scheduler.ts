@@ -16,6 +16,28 @@ interface TaskConfig {
 
 const jobs = new Map<number, CronJob>()
 
+// 追踪正在执行的任务的 AbortController，用于暂停时强制中止
+const runningControllers = new Map<number, AbortController>()
+
+/**
+ * 中止正在执行的任务
+ */
+export function abortTask(taskId: number): void {
+  const controller = runningControllers.get(taskId)
+  if (controller) {
+    controller.abort()
+    runningControllers.delete(taskId)
+    console.log(`[Scheduler] 任务 ${taskId} 已被中止`)
+  }
+}
+
+/**
+ * 检查任务是否正在执行中
+ */
+export function isTaskRunning(taskId: number): boolean {
+  return runningControllers.has(taskId)
+}
+
 /**
  * 从文本中提取所有 markdown 代码块的内容
  */
@@ -327,7 +349,7 @@ function replaceTemplateVars(template: string): string {
 /**
  * 调用扣子 Bot API
  */
-async function callCozeBot(botId: string, message: string): Promise<string> {
+async function callCozeBot(botId: string, message: string, signal?: AbortSignal): Promise<string> {
   const token = process.env.COZE_WORKLOAD_API_TOKEN
   const baseUrl = process.env.COZE_API_BASE_URL || "https://api.coze.cn"
 
@@ -350,6 +372,7 @@ async function callCozeBot(botId: string, message: string): Promise<string> {
         },
       ],
     }),
+    signal,
   })
 
   const result = await response.json()
@@ -370,13 +393,14 @@ async function callCozeBot(botId: string, message: string): Promise<string> {
 
       const retrieveRes = await fetch(`${baseUrl}/v3/chat/retrieve?chat_id=${chatId}&conversation_id=${conversationId}`, {
         headers: { Authorization: `Bearer ${token}` },
+        signal,
       })
       const retrieveData = await retrieveRes.json()
 
       if (retrieveData.data && retrieveData.data.status === "completed") {
         const msgRes = await fetch(
           `${baseUrl}/v3/chat/message/list?chat_id=${chatId}&conversation_id=${conversationId}`,
-          { headers: { Authorization: `Bearer ${token}` } }
+          { headers: { Authorization: `Bearer ${token}` }, signal }
         )
         const msgData = await msgRes.json()
         // 获取所有 assistant 消息并合并（智能体可能返回多条消息）
@@ -395,13 +419,25 @@ async function callCozeBot(botId: string, message: string): Promise<string> {
  */
 async function callCozeWorkflow(
   workflowId: string,
-  parameters: Record<string, unknown>
+  parameters: Record<string, unknown>,
+  externalSignal?: AbortSignal
 ): Promise<Record<string, unknown>> {
   const token = process.env.COZE_WORKLOAD_API_TOKEN
   const baseUrl = process.env.COZE_API_BASE_URL || "https://api.coze.cn"
 
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), 360000) // 6 分钟超时
+
+  // 如果有外部 signal（暂停中止），监听它并转发到内部 controller
+  let onExternalAbort: (() => void) | null = null
+  if (externalSignal) {
+    if (externalSignal.aborted) {
+      controller.abort()
+    } else {
+      onExternalAbort = () => controller.abort()
+      externalSignal.addEventListener("abort", onExternalAbort)
+    }
+  }
 
   try {
     const response = await fetch(`${baseUrl}/v1/workflow/stream_run`, {
@@ -507,18 +543,28 @@ async function callCozeWorkflow(
     return {}
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
+      // 区分是外部中止还是超时
+      if (externalSignal?.aborted) {
+        throw new Error("任务已被手动中止")
+      }
       throw new Error("工作流调用超时（6分钟）")
     }
     throw error
   } finally {
     clearTimeout(timeoutId)
+    if (onExternalAbort && externalSignal) {
+      externalSignal.removeEventListener("abort", onExternalAbort)
+    }
   }
 }
 
 /**
  * 执行单次诊断任务并保存结果
  */
-async function executeDiagnosisTask(task: TaskConfig): Promise<{
+async function executeDiagnosisTask(
+  task: TaskConfig,
+  signal?: AbortSignal
+): Promise<{
   success: boolean
   responseText: string
   error?: string
@@ -528,7 +574,7 @@ async function executeDiagnosisTask(task: TaskConfig): Promise<{
       const message = replaceTemplateVars(
         task.prompt_template || "请对当前施工图片进行诊断分析"
       )
-      const fullText = await callCozeBot(task.bot_id, message)
+      const fullText = await callCozeBot(task.bot_id, message, signal)
 
       // 解析诊断结果（支持单设备和多设备）
       const diagnosisList = parseDiagnosisList(fullText)
@@ -549,7 +595,7 @@ async function executeDiagnosisTask(task: TaskConfig): Promise<{
         }
       }
 
-      const data = await callCozeWorkflow(task.workflow_id, params)
+      const data = await callCozeWorkflow(task.workflow_id, params, signal)
       const fullText = JSON.stringify(data)
 
       // 尝试从工作流输出中提取诊断结果（支持多设备）
@@ -586,8 +632,10 @@ async function executeDiagnosisTask(task: TaskConfig): Promise<{
 
 /**
  * 执行任务（通用入口）
+ * @param taskId 任务 ID
+ * @param force 是否强制执行（忽略 is_active 检查，用于手动触发）
  */
-export async function executeTask(taskId: number): Promise<void> {
+export async function executeTask(taskId: number, force = false): Promise<void> {
   const supabase = getSupabaseClient()
 
   const { data: tasks, error } = await supabase
@@ -598,7 +646,12 @@ export async function executeTask(taskId: number): Promise<void> {
 
   if (error || !tasks || tasks.length === 0) return
   const task = tasks[0] as TaskConfig
-  if (!task.is_active) return
+  // 定时调度执行时检查 is_active；手动触发（force=true）时跳过检查
+  if (!force && !task.is_active) return
+
+  // 创建 AbortController 用于追踪和中止
+  const controller = new AbortController()
+  runningControllers.set(taskId, controller)
 
   // 记录执行日志
   const { data: logEntry } = await supabase
@@ -612,7 +665,7 @@ export async function executeTask(taskId: number): Promise<void> {
     .limit(1)
 
   try {
-    const result = await executeDiagnosisTask(task)
+    const result = await executeDiagnosisTask(task, controller.signal)
 
     if (logEntry && logEntry.length > 0) {
       await supabase
@@ -646,6 +699,8 @@ export async function executeTask(taskId: number): Promise<void> {
         })
         .eq("id", logEntry[0].id)
     }
+  } finally {
+    runningControllers.delete(taskId)
   }
 }
 

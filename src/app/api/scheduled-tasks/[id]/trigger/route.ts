@@ -21,8 +21,8 @@ export async function POST(
       return NextResponse.json({ error: "任务不存在" }, { status: 404 })
     }
 
-    // 异步执行任务
-    executeTask(taskId).catch(console.error)
+    // 异步执行任务（force=true 绕过 is_active 检查，暂停态也可手动触发）
+    executeTask(taskId, true).catch(console.error)
 
     return NextResponse.json({ success: true, message: "任务已触发" })
   } catch (error) {

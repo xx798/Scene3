@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getSupabaseClient } from "@/storage/database/supabase-client"
-import { reloadTask, stopTask } from "@/lib/scheduler"
+import { reloadTask, stopTask, abortTask } from "@/lib/scheduler"
 
 export async function GET(
   _request: NextRequest,
@@ -52,6 +52,8 @@ export async function PUT(
     if (data[0].is_active) {
       await reloadTask(data[0].id)
     } else {
+      // 暂停时先中止正在执行的任务，再停止 cron 调度
+      abortTask(data[0].id)
       await stopTask(data[0].id)
     }
 
