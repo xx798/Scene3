@@ -31,8 +31,7 @@ import {
 import {
   Clock,
   Plus,
-  Play,
-  Pause,
+  Power,
   Zap,
   Trash2,
   Edit,
@@ -334,10 +333,8 @@ export default function ScheduledTasksPage() {
                       >
                         {toggling === task.id ? (
                           <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : task.is_active ? (
-                          <Pause className="h-4 w-4 hover:text-rose-500 transition-colors" />
                         ) : (
-                          <Play className="h-4 w-4 hover:text-emerald-500 transition-colors" />
+                          <Power className={`h-4 w-4 transition-colors ${task.is_active ? "hover:text-rose-500" : "hover:text-emerald-500"}`} />
                         )}
                       </Button>
                       {/* 手动触发按钮 */}
