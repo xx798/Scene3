@@ -4,6 +4,24 @@ import fs from "fs"
 import { getSupabaseClient } from "@/storage/database/supabase-client"
 
 /**
+ * 下载图片并返回 Buffer，失败返回 null
+ */
+async function downloadImage(url: string): Promise<Buffer | null> {
+  if (!url) return null
+  try {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 10000)
+    const response = await fetch(url, { signal: controller.signal })
+    clearTimeout(timeout)
+    if (!response.ok) return null
+    const arrayBuffer = await response.arrayBuffer()
+    return Buffer.from(arrayBuffer)
+  } catch {
+    return null
+  }
+}
+
+/**
  * 生成每日汇总 Excel 报告
  * 从数据库读取当日所有诊断记录，生成 Excel 文件保存到 public/reports/
  */
@@ -35,6 +53,14 @@ export async function generateDailyExcelReport(reportDate: string): Promise<{
   const totalCount = rows.length
   const abnormalCount = rows.filter((r: Record<string, unknown>) => r.status === "abnormal").length
   const normalCount = rows.filter((r: Record<string, unknown>) => r.status === "normal").length
+
+  // 预下载所有图片（并行）
+  const imageBuffers = await Promise.all(
+    rows.map((record: Record<string, unknown>) => {
+      const imageUrl = record.image_url as string
+      return downloadImage(imageUrl || "")
+    })
+  )
 
   // 创建工作簿
   const workbook = new ExcelJS.Workbook()
@@ -92,7 +118,7 @@ export async function generateDailyExcelReport(reportDate: string): Promise<{
     { header: "拍摄时间", key: "capture_time", width: 20 },
     { header: "综合状态", key: "status", width: 10 },
     { header: "风险项明细", key: "risk_all", width: 60 },
-    { header: "图片URL", key: "image_url", width: 50 },
+    { header: "现场图片", key: "image_col", width: 20 },
   ]
 
   detailSheet.getRow(1).eachCell((cell) => {
@@ -101,6 +127,10 @@ export async function generateDailyExcelReport(reportDate: string): Promise<{
     cell.alignment = { horizontal: "center", vertical: "middle" }
     cell.border = thinBorder
   })
+
+  // 缩略图尺寸（像素）
+  const thumbWidth = 140
+  const thumbHeight = 90
 
   rows.forEach((record: Record<string, unknown>, idx: number) => {
     const riskItems = (Array.isArray(record.risk_items) ? record.risk_items : []) as Array<{
@@ -130,8 +160,11 @@ export async function generateDailyExcelReport(reportDate: string): Promise<{
         : "",
       status: record.status === "normal" ? "正常" : "异常",
       risk_all: allRisks || "无",
-      image_url: (record.image_url as string) || "",
+      image_col: imageBuffers[idx] ? "" : "无图片",
     })
+
+    // 设置行高以容纳缩略图（约 72pt ≈ 96px）
+    row.height = 72
 
     if (record.status === "abnormal") {
       row.getCell("status").font = { color: { argb: "FFF43F5E" }, bold: true }
@@ -141,6 +174,22 @@ export async function generateDailyExcelReport(reportDate: string): Promise<{
       cell.border = thinBorder
       cell.alignment = { vertical: "middle", wrapText: true }
     })
+
+    // 嵌入图片缩略图
+    const imgBuffer = imageBuffers[idx]
+    if (imgBuffer) {
+      const imageId = workbook.addImage({
+        base64: `data:image/png;base64,${imgBuffer.toString("base64")}`,
+        extension: "png",
+      })
+      // 图片列是第 10 列（index 9），行号是 idx + 2（第 1 行是表头）
+      const colIdx = 9 // 0-based column index for "现场图片"
+      const rowIdx = idx + 1 // 0-based, +1 for header
+      detailSheet.addImage(imageId, {
+        tl: { col: colIdx + 0.05, row: rowIdx + 0.1 } as { col: number; row: number },
+        ext: { width: thumbWidth, height: thumbHeight },
+      })
+    }
   })
 
   // === Sheet 3: 风险项明细 ===
