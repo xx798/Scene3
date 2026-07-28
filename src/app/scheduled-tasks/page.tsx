@@ -31,6 +31,7 @@ import {
 import {
   Clock,
   Plus,
+  Power,
   Play,
   Trash2,
   Edit,
@@ -77,6 +78,8 @@ export default function ScheduledTasksPage() {
   const [logs, setLogs] = useState<TaskLog[]>([])
   const [logsLoading, setLogsLoading] = useState(false)
   const [triggering, setTriggering] = useState<number | null>(null)
+  const [toggling, setToggling] = useState<number | null>(null)
+  const [runningTaskIds, setRunningTaskIds] = useState<Set<number>>(new Set())
 
   // 表单状态
   const [formName, setFormName] = useState("")
@@ -102,6 +105,15 @@ export default function ScheduledTasksPage() {
   useEffect(() => {
     fetchTasks()
   }, [fetchTasks])
+
+  // 轮询检查任务执行状态（当有触发中的任务时）
+  useEffect(() => {
+    if (triggering === null) return
+    const timer = setInterval(() => {
+      fetchTasks()
+    }, 3000)
+    return () => clearInterval(timer)
+  }, [triggering, fetchTasks])
 
   const fetchLogs = async (taskId: number) => {
     setLogsTaskId(taskId)
@@ -193,6 +205,7 @@ export default function ScheduledTasksPage() {
   }
 
   const handleToggle = async (task: ScheduledTask) => {
+    setToggling(task.id)
     try {
       await fetch(`/api/scheduled-tasks/${task.id}`, {
         method: "PUT",
@@ -202,20 +215,28 @@ export default function ScheduledTasksPage() {
       fetchTasks()
     } catch (error) {
       console.error("切换失败:", error)
+    } finally {
+      setToggling(null)
     }
   }
 
   const handleTrigger = async (id: number) => {
     setTriggering(id)
+    setRunningTaskIds((prev) => new Set(prev).add(id))
     try {
       await fetch(`/api/scheduled-tasks/${id}/trigger`, { method: "POST" })
-      // 等待一下再刷新
+      // 轮询刷新会在 useEffect 中处理，这里延迟清除 triggering
       setTimeout(() => {
         fetchTasks()
         setTriggering(null)
-      }, 2000)
+      }, 5000)
     } catch {
       setTriggering(null)
+      setRunningTaskIds((prev) => {
+        const next = new Set(prev)
+        next.delete(id)
+        return next
+      })
     }
   }
 
@@ -289,22 +310,34 @@ export default function ScheduledTasksPage() {
                     </TableCell>
                     <TableCell className="font-mono text-xs">{task.cron_expression}</TableCell>
                     <TableCell>
-                      <button
-                        onClick={() => handleToggle(task)}
-                        className="flex items-center gap-1"
-                        title={task.is_active ? "点击停用" : "点击启用"}
-                      >
-                        {task.is_active ? (
-                          <Badge className="bg-emerald-500">运行中</Badge>
-                        ) : (
-                          <Badge variant="secondary">已停用</Badge>
-                        )}
-                      </button>
+                      {runningTaskIds.has(task.id) || triggering === task.id ? (
+                        <Badge className="bg-sky-500 animate-pulse">执行中</Badge>
+                      ) : task.is_active ? (
+                        <Badge className="bg-emerald-500">运行中</Badge>
+                      ) : (
+                        <Badge variant="secondary">已暂停</Badge>
+                      )}
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground">
                       {formatTime(task.last_run_at)}
                     </TableCell>
                     <TableCell className="flex items-center justify-end gap-1">
+                      {/* 启停切换按钮 */}
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => handleToggle(task)}
+                        disabled={toggling === task.id}
+                        title={task.is_active ? "暂停" : "启动"}
+                      >
+                        {toggling === task.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Power className={`h-4 w-4 transition-colors ${task.is_active ? "hover:text-rose-500" : "hover:text-emerald-500"}`} />
+                        )}
+                      </Button>
+                      {/* 手动触发按钮 */}
                       <Button
                         variant="ghost"
                         size="icon"
