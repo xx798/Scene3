@@ -1,13 +1,14 @@
 'use client';
 
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react';
-import { getToken, setToken, setStoredUser, clearAuth, getStoredUser, type AuthUser } from '@/lib/auth-fetch';
+import { getToken, setToken, setStoredUser, clearAuth, getStoredUser, authFetch, type AuthUser } from '@/lib/auth-fetch';
 
 interface AuthContextType {
   user: AuthUser | null;
   isLoading: boolean;
   login: (token: string, user: AuthUser) => void;
   logout: () => void;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -15,6 +16,7 @@ const AuthContext = createContext<AuthContextType>({
   isLoading: true,
   login: () => {},
   logout: () => {},
+  refreshUser: async () => {},
 });
 
 export function useAuth() {
@@ -46,8 +48,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     window.location.href = '/login';
   }, []);
 
+  const refreshUser = useCallback(async () => {
+    try {
+      const res = await authFetch('/api/auth/me');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.user) {
+          setUser(data.user);
+          setStoredUser(data.user);
+        }
+      }
+    } catch {
+      // 静默失败
+    }
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, logout }}>
+    <AuthContext.Provider value={{ user, isLoading, login, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );
