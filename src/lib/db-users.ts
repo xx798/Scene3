@@ -99,16 +99,27 @@ export async function updateUser(id: number, params: {
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (params.name !== undefined) updates.name = params.name;
   if (params.role !== undefined) updates.role = params.role;
+  
+  let needVersionIncrement = false;
   if (params.is_active !== undefined) {
     updates.is_active = params.is_active;
-    // 状态变更时更新 token_version，使旧 token 立即失效
-    updates.token_version = new Date().getTime();
+    needVersionIncrement = true;
   }
   if (params.password !== undefined) {
     updates.password_hash = await hashPassword(params.password);
-    // 密码变更时也更新 token_version
-    updates.token_version = new Date().getTime();
+    needVersionIncrement = true;
   }
+  
+  // 状态或密码变更时递增 token_version，使旧 token 立即失效
+  if (needVersionIncrement) {
+    const { data: current } = await client
+      .from('users')
+      .select('token_version')
+      .eq('id', id)
+      .single();
+    updates.token_version = ((current?.token_version as number) || 0) + 1;
+  }
+  
   const { data, error } = await client
     .from('users')
     .update(updates)
@@ -130,9 +141,17 @@ export async function deleteUser(id: number): Promise<void> {
 
 export async function incrementTokenVersion(id: number): Promise<void> {
   const client = getAdminClient();
+  // 简单递增 token_version
+  const { data: current } = await client
+    .from('users')
+    .select('token_version')
+    .eq('id', id)
+    .single();
+  
+  const newVersion = (current?.token_version || 0) + 1;
   await client
     .from('users')
-    .update({ token_version: new Date().getTime() })
+    .update({ token_version: newVersion })
     .eq('id', id);
 }
 
