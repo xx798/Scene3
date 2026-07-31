@@ -99,9 +99,15 @@ export async function updateUser(id: number, params: {
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (params.name !== undefined) updates.name = params.name;
   if (params.role !== undefined) updates.role = params.role;
-  if (params.is_active !== undefined) updates.is_active = params.is_active;
+  if (params.is_active !== undefined) {
+    updates.is_active = params.is_active;
+    // 状态变更时更新 token_version，使旧 token 立即失效
+    updates.token_version = new Date().getTime();
+  }
   if (params.password !== undefined) {
     updates.password_hash = await hashPassword(params.password);
+    // 密码变更时也更新 token_version
+    updates.token_version = new Date().getTime();
   }
   const { data, error } = await client
     .from('users')
