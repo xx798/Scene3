@@ -8,6 +8,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Download, FileSpreadsheet, CalendarIcon, Loader2, AlertCircle, Trash2 } from "lucide-react"
 import { format } from "date-fns"
 import { cn } from "@/lib/utils"
+import { authFetch } from "@/lib/auth-fetch"
 
 interface DailyReport {
   id: number
@@ -30,7 +31,7 @@ export default function ReportsPage() {
 
   const fetchReports = useCallback(async () => {
     try {
-      const res = await fetch("/api/reports")
+      const res = await authFetch("/api/reports")
       const data = await res.json()
       setReports(data)
     } catch (error) {
@@ -52,7 +53,7 @@ export default function ReportsPage() {
 
     try {
       const dateStr = format(selectedDate, "yyyy-MM-dd")
-      const res = await fetch("/api/reports/generate", {
+      const res = await authFetch("/api/reports/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ date: dateStr }),
@@ -75,7 +76,7 @@ export default function ReportsPage() {
   const handleDownload = async (report: DailyReport) => {
     try {
       // 调用下载接口，后端会自动处理文件生成
-      const response = await fetch(`/api/reports/download?id=${report.id}`)
+      const response = await authFetch(`/api/reports/download?id=${report.id}`)
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
         throw new Error(errorData.error || `下载失败: HTTP ${response.status}`)
@@ -104,7 +105,7 @@ export default function ReportsPage() {
     setMessage(null)
 
     try {
-      const res = await fetch(`/api/reports?id=${report.id}`, { method: "DELETE" })
+      const res = await authFetch(`/api/reports?id=${report.id}`, { method: "DELETE" })
       const data = await res.json()
 
       if (data.success) {

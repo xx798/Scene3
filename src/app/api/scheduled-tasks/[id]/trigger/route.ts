@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getSupabaseClient } from "@/storage/database/supabase-client"
 import { executeTask } from "@/lib/scheduler"
+import { authenticateRequest } from "@/lib/auth-utils"
 
 export async function POST(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const { user, error: authError, status: authStatus } = await authenticateRequest(request);
+  if (!user) return NextResponse.json({ error: authError }, { status: authStatus });
+
   try {
     const { id } = await params
     const taskId = parseInt(id)

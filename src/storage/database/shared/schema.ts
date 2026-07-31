@@ -1,5 +1,20 @@
 import { pgTable, serial, timestamp, text, varchar, jsonb, boolean, integer, index } from "drizzle-orm/pg-core"
 
+export const users = pgTable(
+	"users",
+	{
+		id: serial().primaryKey(),
+		username: varchar("username", { length: 100 }).notNull().unique(),
+		password_hash: text("password_hash").notNull(),
+		name: varchar("name", { length: 100 }).notNull(),
+		role: varchar("role", { length: 20 }).notNull().default("employee"),
+		is_active: boolean("is_active").notNull().default(true),
+		token_version: integer("token_version").notNull().default(1),
+		created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		updated_at: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+	}
+);
+
 export const healthCheck = pgTable("health_check", {
 	id: serial().notNull(),
 	updatedAt: timestamp("updated_at", { withTimezone: true, mode: 'string' }).defaultNow(),

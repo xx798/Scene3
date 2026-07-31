@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { Calendar, Search, Loader2, Image as ImageIcon, ChevronDown, ChevronUp, Video, MapPin } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { subscribeDiagnosisInsert } from '@/lib/browser-supabase-client';
+import { authFetch } from '@/lib/auth-fetch';
 
 interface RiskItem {
   item_name: string;
@@ -170,7 +171,7 @@ export default function HistoryPage() {
   const fetchRecords = useCallback(async (date: string) => {
     try {
       setLoading(true);
-      const res = await fetch(`/api/history?date=${date}`);
+      const res = await authFetch(`/api/history?date=${date}`);
       if (!res.ok) throw new Error('Failed to fetch');
       const data = await res.json();
       setRecords(data);

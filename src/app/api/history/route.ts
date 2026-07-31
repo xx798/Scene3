@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
+import { authenticateRequest } from '@/lib/auth-utils';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
+  const { user, error: authError, status: authStatus } = await authenticateRequest(request);
+  if (!user) return NextResponse.json({ error: authError }, { status: authStatus });
+
   try {
     const { searchParams } = new URL(request.url);
     const date = searchParams.get('date');

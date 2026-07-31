@@ -1,9 +1,13 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
+import { authenticateRequest } from '@/lib/auth-utils';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const { user, error, status } = await authenticateRequest(request);
+  if (!user) return NextResponse.json({ error }, { status });
+
   try {
     const client = getSupabaseClient();
 

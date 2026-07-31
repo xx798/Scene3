@@ -41,6 +41,7 @@ import {
   Loader2,
   Calendar,
 } from "lucide-react"
+import { authFetch } from "@/lib/auth-fetch"
 
 interface ScheduledTask {
   id: number
@@ -92,7 +93,7 @@ export default function ScheduledTasksPage() {
 
   const fetchTasks = useCallback(async () => {
     try {
-      const res = await fetch("/api/scheduled-tasks")
+      const res = await authFetch("/api/scheduled-tasks")
       const data = await res.json()
       setTasks(Array.isArray(data) ? data : [])
     } catch {
@@ -120,7 +121,7 @@ export default function ScheduledTasksPage() {
     setLogsOpen(true)
     setLogsLoading(true)
     try {
-      const res = await fetch(`/api/scheduled-tasks/${taskId}/logs?limit=20`)
+      const res = await authFetch(`/api/scheduled-tasks/${taskId}/logs?limit=20`)
       const data = await res.json()
       setLogs(Array.isArray(data) ? data : [])
     } catch {
@@ -174,13 +175,13 @@ export default function ScheduledTasksPage() {
 
     try {
       if (editTask) {
-        await fetch(`/api/scheduled-tasks/${editTask.id}`, {
+        await authFetch(`/api/scheduled-tasks/${editTask.id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         })
       } else {
-        await fetch("/api/scheduled-tasks", {
+        await authFetch("/api/scheduled-tasks", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
@@ -197,7 +198,7 @@ export default function ScheduledTasksPage() {
   const handleDelete = async (id: number) => {
     if (!confirm("确定删除此任务？")) return
     try {
-      await fetch(`/api/scheduled-tasks/${id}`, { method: "DELETE" })
+      await authFetch(`/api/scheduled-tasks/${id}`, { method: "DELETE" })
       fetchTasks()
     } catch (error) {
       console.error("删除失败:", error)
@@ -207,7 +208,7 @@ export default function ScheduledTasksPage() {
   const handleToggle = async (task: ScheduledTask) => {
     setToggling(task.id)
     try {
-      await fetch(`/api/scheduled-tasks/${task.id}`, {
+      await authFetch(`/api/scheduled-tasks/${task.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ is_active: !task.is_active }),
@@ -224,7 +225,7 @@ export default function ScheduledTasksPage() {
     setTriggering(id)
     setRunningTaskIds((prev) => new Set(prev).add(id))
     try {
-      await fetch(`/api/scheduled-tasks/${id}/trigger`, { method: "POST" })
+      await authFetch(`/api/scheduled-tasks/${id}/trigger`, { method: "POST" })
       // 轮询刷新会在 useEffect 中处理，这里延迟清除 triggering
       setTimeout(() => {
         fetchTasks()
