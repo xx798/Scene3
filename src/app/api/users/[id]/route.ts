@@ -52,7 +52,25 @@ export async function PUT(
       return NextResponse.json({ error: '密码至少 6 位' }, { status: 400 });
     }
 
-    const updated = await updateUser(Number(id), { name, role, is_active, password });
+    const targetId = Number(id);
+
+    // 不能禁用自己
+    if (is_active === false && user.userId === targetId) {
+      return NextResponse.json({ error: '不能禁用自己的账号' }, { status: 400 });
+    }
+
+    // 不能删除最后一个管理员的权限
+    if (role && role !== 'admin' && user.role === 'admin') {
+      const { listUsers } = await import('@/lib/db-users');
+      const allUsers = await listUsers();
+      const adminCount = allUsers.filter((u: { role: string; is_active: boolean }) => u.role === 'admin' && u.is_active).length;
+      const isTargetAdmin = allUsers.find((u: { id: number; role: string }) => u.id === targetId)?.role === 'admin';
+      if (isTargetAdmin && adminCount <= 1) {
+        return NextResponse.json({ error: '不能移除最后一个管理员的权限' }, { status: 400 });
+      }
+    }
+
+    const updated = await updateUser(targetId, { name, role, is_active, password });
     return NextResponse.json({ user: updated });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : '更新失败';
