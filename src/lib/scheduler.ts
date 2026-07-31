@@ -12,6 +12,7 @@ interface TaskConfig {
   prompt_template: string
   workflow_parameters: string
   is_active: boolean
+  last_run_at: string | null
 }
 
 const jobs = new Map<number, CronJob>()
@@ -807,4 +808,116 @@ export async function stopTask(taskId: number): Promise<void> {
 
 export function getLoadedTaskIds(): number[] {
   return Array.from(jobs.keys())
+}
+
+/**
+ * 检查 cron 表达式在给定时间窗口内是否有触发点
+ * 用于判断任务是否到期（支持冷启动补偿）
+ */
+function isCronDueInWindow(
+  cronExpression: string,
+  lastRunAt: string | null,
+  windowMinutes: number = 5
+): boolean {
+  try {
+    const now = new Date()
+    const windowStart = new Date(now.getTime() - windowMinutes * 60 * 1000)
+
+    const job = new CronJob(
+      cronExpression,
+      () => {},
+      null,
+      false,
+      "Asia/Shanghai"
+    )
+
+    // 从窗口起始时间开始，逐步检查每个触发点
+    let checkTime = new Date(windowStart)
+    // 对齐到秒（CronJob 精度为秒）
+    checkTime.setMilliseconds(0)
+
+    while (checkTime <= now) {
+      const nextDate = job.nextDate()
+      if (!nextDate) break
+
+      const nextFire = nextDate.toJSDate()
+      if (nextFire > now) break
+
+      // 找到了一个在窗口内的触发点
+      if (nextFire >= windowStart && nextFire <= now) {
+        // 如果 last_run_at 在这个触发点之前（或为空），说明该任务到期了
+        if (!lastRunAt) return true
+        const lastRun = new Date(lastRunAt)
+        if (lastRun < nextFire) return true
+      }
+
+      // 推进到下一个触发点之后继续检查
+      checkTime = new Date(nextFire.getTime() + 1000)
+    }
+
+    return false
+  } catch {
+    // cron 表达式无效，跳过
+    return false
+  }
+}
+
+/**
+ * 检查所有活跃的定时任务，执行到期的任务
+ * 供外部定时触发器（如 GitHub Actions）每分钟调用
+ *
+ * @param windowMinutes 补偿窗口（默认 5 分钟），在此窗口内到期但未执行的任务都会被补执行
+ */
+export async function checkAndExecuteDueTasks(
+  windowMinutes: number = 5
+): Promise<{
+  checked: number
+  triggered: number
+  tasks: Array<{ id: number; name: string; status: string }>
+}> {
+  const supabase = getSupabaseClient()
+
+  const { data: tasks, error } = await supabase
+    .from("scheduled_tasks")
+    .select("*")
+    .eq("is_active", true)
+
+  if (error || !tasks || tasks.length === 0) {
+    return { checked: 0, triggered: 0, tasks: [] }
+  }
+
+  const results: Array<{ id: number; name: string; status: string }> = []
+  let triggeredCount = 0
+
+  for (const task of tasks) {
+    const config = task as TaskConfig
+    const isDue = isCronDueInWindow(
+      config.cron_expression,
+      config.last_run_at,
+      windowMinutes
+    )
+
+    if (isDue) {
+      // 防止并发：检查任务是否正在执行
+      if (isTaskRunning(config.id)) {
+        results.push({ id: config.id, name: config.name, status: "skipped_running" })
+        continue
+      }
+
+      // 异步执行，不阻塞响应
+      executeTask(config.id).catch((err) => {
+        console.error(`[TriggerDue] 任务 ${config.id} 执行失败:`, err)
+      })
+      triggeredCount++
+      results.push({ id: config.id, name: config.name, status: "triggered" })
+    } else {
+      results.push({ id: config.id, name: config.name, status: "not_due" })
+    }
+  }
+
+  console.log(
+    `[TriggerDue] 检查 ${tasks.length} 个活跃任务，触发 ${triggeredCount} 个`
+  )
+
+  return { checked: tasks.length, triggered: triggeredCount, tasks: results }
 }
