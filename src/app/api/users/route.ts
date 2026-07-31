@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { authenticateRequest, requireAdmin } from '@/lib/auth-utils';
+import { authenticateRequest, requireAdmin, ROLES, isSuperAdmin, canManageUser } from '@/lib/auth-utils';
 import { listUsers, createUser } from '@/lib/db-users';
 
 export async function GET(request: NextRequest) {
@@ -9,7 +9,13 @@ export async function GET(request: NextRequest) {
   const adminCheck = requireAdmin(user);
   if (adminCheck.error) return NextResponse.json({ error: adminCheck.error }, { status: adminCheck.status });
 
-  const users = await listUsers();
+  const allUsers = await listUsers();
+  
+  // 根据角色过滤：admin 只能看到 employee，super_admin 可以看到所有人
+  const users = isSuperAdmin(user.role)
+    ? allUsers
+    : allUsers.filter(u => u.role === ROLES.EMPLOYEE);
+  
   return NextResponse.json({ users });
 }
 
@@ -37,8 +43,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '密码至少 6 位' }, { status: 400 });
     }
 
-    if (!['admin', 'employee'].includes(role)) {
-      return NextResponse.json({ error: '角色无效' }, { status: 400 });
+    // 角色验证：super_admin 可以创建所有角色，admin 只能创建 employee
+    const validRoles = isSuperAdmin(user.role)
+      ? [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.EMPLOYEE]
+      : [ROLES.EMPLOYEE];
+    
+    if (!validRoles.includes(role as typeof ROLES[keyof typeof ROLES])) {
+      return NextResponse.json({ error: '无权限创建该角色的用户' }, { status: 403 });
     }
 
     const newUser = await createUser({

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { authenticateRequest, requireAdmin } from '@/lib/auth-utils';
+import { authenticateRequest, requireAdmin, ROLES, isSuperAdmin, canManageUser, canDeleteUser } from '@/lib/auth-utils';
 import { updateUser, deleteUser, findById } from '@/lib/db-users';
 
 export async function GET(
@@ -15,6 +15,11 @@ export async function GET(
   const { id } = await params;
   const target = await findById(Number(id));
   if (!target) return NextResponse.json({ error: '用户不存在' }, { status: 404 });
+
+  // admin 只能查看 employee
+  if (!isSuperAdmin(user.role) && target.role !== ROLES.EMPLOYEE) {
+    return NextResponse.json({ error: '无权限查看该用户' }, { status: 403 });
+  }
 
   return NextResponse.json({
     user: {
@@ -53,21 +58,24 @@ export async function PUT(
     }
 
     const targetId = Number(id);
+    const target = await findById(targetId);
+    if (!target) {
+      return NextResponse.json({ error: '用户不存在' }, { status: 404 });
+    }
+
+    // 检查是否可以管理该用户
+    if (!canManageUser(user.role, target.role)) {
+      return NextResponse.json({ error: '无权限操作该用户' }, { status: 403 });
+    }
 
     // 不能禁用自己
     if (is_active === false && user.userId === targetId) {
       return NextResponse.json({ error: '不能禁用自己的账号' }, { status: 400 });
     }
 
-    // 不能删除最后一个管理员的权限
-    if (role && role !== 'admin' && user.role === 'admin') {
-      const { listUsers } = await import('@/lib/db-users');
-      const allUsers = await listUsers();
-      const adminCount = allUsers.filter((u: { role: string; is_active: boolean }) => u.role === 'admin' && u.is_active).length;
-      const isTargetAdmin = allUsers.find((u: { id: number; role: string }) => u.id === targetId)?.role === 'admin';
-      if (isTargetAdmin && adminCount <= 1) {
-        return NextResponse.json({ error: '不能移除最后一个管理员的权限' }, { status: 400 });
-      }
+    // 角色变更检查：admin 不能将用户改为 admin 或 super_admin
+    if (role && !isSuperAdmin(user.role) && role !== ROLES.EMPLOYEE) {
+      return NextResponse.json({ error: '无权限设置该角色' }, { status: 403 });
     }
 
     const updated = await updateUser(targetId, { name, role, is_active, password });
@@ -93,6 +101,16 @@ export async function DELETE(
 
   if (targetId === user.userId) {
     return NextResponse.json({ error: '不能删除自己的账号' }, { status: 400 });
+  }
+
+  const target = await findById(targetId);
+  if (!target) {
+    return NextResponse.json({ error: '用户不存在' }, { status: 404 });
+  }
+
+  // 检查是否可以删除该用户（super_admin 不能被删除）
+  if (!canDeleteUser(user.role, target.role, isSuperAdmin(target.role))) {
+    return NextResponse.json({ error: '无权限删除该用户' }, { status: 403 });
   }
 
   try {

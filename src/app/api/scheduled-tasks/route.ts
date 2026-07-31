@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getSupabaseClient } from "@/storage/database/supabase-client"
 import { reloadTask } from "@/lib/scheduler"
-import { authenticateRequest } from "@/lib/auth-utils"
+import { authenticateRequest, requireAdmin } from "@/lib/auth-utils"
 
 export async function GET(request: NextRequest) {
   const { user, error: authError, status: authStatus } = await authenticateRequest(request);
   if (!user) return NextResponse.json({ error: authError }, { status: authStatus });
+
+  const adminCheck = requireAdmin(user);
+  if (adminCheck.error) return NextResponse.json({ error: adminCheck.error }, { status: adminCheck.status });
 
   try {
     const supabase = getSupabaseClient()
@@ -24,6 +27,9 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const { user, error: authError, status: authStatus } = await authenticateRequest(request);
   if (!user) return NextResponse.json({ error: authError }, { status: authStatus });
+
+  const adminCheck = requireAdmin(user);
+  if (adminCheck.error) return NextResponse.json({ error: adminCheck.error }, { status: adminCheck.status });
 
   try {
     const body = await request.json()

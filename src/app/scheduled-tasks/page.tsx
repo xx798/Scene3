@@ -40,8 +40,10 @@ import {
   XCircle,
   Loader2,
   Calendar,
+  ShieldX,
 } from "lucide-react"
 import { authFetch } from "@/lib/auth-fetch"
+import { useAuth } from "@/components/auth-provider"
 
 interface ScheduledTask {
   id: number
@@ -70,6 +72,7 @@ interface TaskLog {
 }
 
 export default function ScheduledTasksPage() {
+  const { user } = useAuth()
   const [tasks, setTasks] = useState<ScheduledTask[]>([])
   const [loading, setLoading] = useState(true)
   const [createOpen, setCreateOpen] = useState(false)
@@ -81,6 +84,9 @@ export default function ScheduledTasksPage() {
   const [triggering, setTriggering] = useState<number | null>(null)
   const [toggling, setToggling] = useState<number | null>(null)
   const [runningTaskIds, setRunningTaskIds] = useState<Set<number>>(new Set())
+
+  // 检查权限（只有管理员可以访问）
+  const hasPermission = user?.role === 'super_admin' || user?.role === 'admin'
 
   // 表单状态
   const [formName, setFormName] = useState("")
@@ -254,6 +260,16 @@ export default function ScheduledTasksPage() {
     { label: "每天早上8点", value: "0 8 * * *" },
     { label: "每天早晚各一次", value: "0 8,18 * * *" },
   ]
+
+  if (!hasPermission) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20">
+        <ShieldX className="h-16 w-16 text-gray-300 mb-4" />
+        <h2 className="text-lg font-semibold text-gray-600 mb-2">无访问权限</h2>
+        <p className="text-sm text-gray-500">定时任务管理仅管理员可访问</p>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">

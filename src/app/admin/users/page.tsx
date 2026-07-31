@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Pencil, Trash2, X, Check, AlertCircle, Search, ShieldCheck, ShieldX, UserCheck, UserX } from 'lucide-react';
+import { Plus, Pencil, Trash2, X, Check, AlertCircle, Search, ShieldCheck, ShieldX, UserCheck, UserX, Crown } from 'lucide-react';
 import { authFetch } from '@/lib/auth-fetch';
+import { useAuth } from '@/components/auth-provider';
 
 interface UserItem {
   id: number;
@@ -15,7 +16,32 @@ interface UserItem {
 
 type ModalMode = 'create' | 'edit' | null;
 
+function getRoleLabel(role: string): string {
+  switch (role) {
+    case 'super_admin': return '超级管理员';
+    case 'admin': return '管理员';
+    default: return '员工';
+  }
+}
+
+function getRoleIcon(role: string) {
+  switch (role) {
+    case 'super_admin': return <Crown className="h-3 w-3" />;
+    case 'admin': return <ShieldCheck className="h-3 w-3" />;
+    default: return <ShieldX className="h-3 w-3" />;
+  }
+}
+
+function getRoleBadgeClass(role: string): string {
+  switch (role) {
+    case 'super_admin': return 'bg-amber-50 text-amber-600';
+    case 'admin': return 'bg-sky-50 text-sky-600';
+    default: return 'bg-gray-100 text-gray-600';
+  }
+}
+
 export default function UsersPage() {
+  const { user: currentUser } = useAuth();
   const [users, setUsers] = useState<UserItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalMode, setModalMode] = useState<ModalMode>(null);
@@ -26,6 +52,8 @@ export default function UsersPage() {
   const [form, setForm] = useState({ username: '', password: '', name: '', role: 'employee' });
   const [formError, setFormError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  const isSuperAdmin = currentUser?.role === 'super_admin';
 
   const fetchUsers = useCallback(async () => {
     try {
@@ -42,6 +70,22 @@ export default function UsersPage() {
     u.username.toLowerCase().includes(search.toLowerCase()) ||
     u.name.toLowerCase().includes(search.toLowerCase())
   );
+
+  // 检查当前用户是否可以操作目标用户
+  const canOperate = (target: UserItem): boolean => {
+    if (!currentUser) return false;
+    if (isSuperAdmin) return true;
+    // admin 只能操作 employee
+    return target.role === 'employee';
+  };
+
+  // 检查当前用户是否可以删除目标用户
+  const canDelete = (target: UserItem): boolean => {
+    if (!currentUser) return false;
+    if (target.id === currentUser.userId) return false; // 不能删除自己
+    if (target.role === 'super_admin') return false; // 不能删除超级管理员
+    return canOperate(target);
+  };
 
   const openCreate = () => {
     setForm({ username: '', password: '', name: '', role: 'employee' });
@@ -127,12 +171,26 @@ export default function UsersPage() {
     } catch { /* handled */ }
   };
 
+  // 根据角色生成可选的角色列表
+  const getRoleOptions = () => {
+    if (isSuperAdmin) {
+      return [
+        { value: 'employee', label: '员工' },
+        { value: 'admin', label: '管理员' },
+        { value: 'super_admin', label: '超级管理员' },
+      ];
+    }
+    return [{ value: 'employee', label: '员工' }];
+  };
+
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold text-[#0F172A]">用户管理</h1>
-          <p className="mt-1 text-sm text-[#64748B]">管理系统用户账号，仅管理员可操作</p>
+          <p className="mt-1 text-sm text-[#64748B]">
+            {isSuperAdmin ? '超级管理员可管理所有用户' : '管理员仅可管理员工账号'}
+          </p>
         </div>
         <button
           onClick={openCreate}
@@ -174,52 +232,70 @@ export default function UsersPage() {
             ) : filteredUsers.length === 0 ? (
               <tr><td colSpan={6} className="px-4 py-12 text-center text-[#64748B]">暂无用户</td></tr>
             ) : (
-              filteredUsers.map((u) => (
-                <tr key={u.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
-                  <td className="px-4 py-3 font-medium text-[#0F172A]">{u.username}</td>
-                  <td className="px-4 py-3 text-[#0F172A]">{u.name}</td>
-                  <td className="px-4 py-3">
-                    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
-                      u.role === 'admin' ? 'bg-sky-50 text-sky-600' : 'bg-gray-100 text-gray-600'
-                    }`}>
-                      {u.role === 'admin' ? <ShieldCheck className="h-3 w-3" /> : <ShieldX className="h-3 w-3" />}
-                      {u.role === 'admin' ? '管理员' : '员工'}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <button
-                      onClick={() => toggleActive(u)}
-                      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium transition-colors ${
-                        u.is_active ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100' : 'bg-rose-50 text-rose-500 hover:bg-rose-100'
-                      }`}
-                    >
-                      {u.is_active ? <UserCheck className="h-3 w-3" /> : <UserX className="h-3 w-3" />}
-                      {u.is_active ? '启用' : '禁用'}
-                    </button>
-                  </td>
-                  <td className="px-4 py-3 text-[#64748B]">
-                    {new Date(u.created_at).toLocaleDateString('zh-CN')}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      <button
-                        onClick={() => openEdit(u)}
-                        className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-sky-50 hover:text-sky-600"
-                        title="编辑"
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={() => setDeleteConfirm(u.id)}
-                        className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-rose-50 hover:text-rose-500"
-                        title="删除"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))
+              filteredUsers.map((u) => {
+                const operable = canOperate(u);
+                const deletable = canDelete(u);
+                return (
+                  <tr key={u.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
+                    <td className="px-4 py-3 font-medium text-[#0F172A]">{u.username}</td>
+                    <td className="px-4 py-3 text-[#0F172A]">{u.name}</td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${getRoleBadgeClass(u.role)}`}>
+                        {getRoleIcon(u.role)}
+                        {getRoleLabel(u.role)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      {operable ? (
+                        <button
+                          onClick={() => toggleActive(u)}
+                          className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium transition-colors ${
+                            u.is_active ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100' : 'bg-rose-50 text-rose-500 hover:bg-rose-100'
+                          }`}
+                        >
+                          {u.is_active ? <UserCheck className="h-3 w-3" /> : <UserX className="h-3 w-3" />}
+                          {u.is_active ? '启用' : '禁用'}
+                        </button>
+                      ) : (
+                        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
+                          u.is_active ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-500'
+                        }`}>
+                          {u.is_active ? <UserCheck className="h-3 w-3" /> : <UserX className="h-3 w-3" />}
+                          {u.is_active ? '启用' : '禁用'}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-[#64748B]">
+                      {new Date(u.created_at).toLocaleDateString('zh-CN')}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        {operable && (
+                          <button
+                            onClick={() => openEdit(u)}
+                            className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-sky-50 hover:text-sky-600"
+                            title="编辑"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </button>
+                        )}
+                        {deletable && (
+                          <button
+                            onClick={() => setDeleteConfirm(u.id)}
+                            className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-rose-50 hover:text-rose-500"
+                            title="删除"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
+                        {!operable && !deletable && (
+                          <span className="text-xs text-gray-400">-</span>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
@@ -288,8 +364,9 @@ export default function UsersPage() {
                   onChange={(e) => setForm({ ...form, role: e.target.value })}
                   className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
                 >
-                  <option value="employee">员工</option>
-                  <option value="admin">管理员</option>
+                  {getRoleOptions().map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
                 </select>
               </div>
             </div>
