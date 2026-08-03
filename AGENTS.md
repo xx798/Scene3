@@ -101,7 +101,7 @@
 ## 业务流程
 
 1. **定时诊断**：用户在"定时任务管理"页创建任务，配置智能体/工作流 ID 和 cron 表达式。调度引擎按 cron 定时调用扣子 API，解析返回的诊断 JSON 存入 `daily_diagnose_data`
-2. **每日合并**：每天 18:00 (Asia/Shanghai) 自动触发，读取当日所有诊断记录，用 exceljs 生成汇总 Excel，存入 `daily_reports` 表
+2. **每日合并**：由 GitHub Actions 每天 18:00 (CST) 调用 `/api/reports/generate` 触发，读取当日所有诊断记录，用 exceljs 生成汇总 Excel，存入 `daily_reports` 表
 3. **报告下载**：用户在"报告下载"页查看历史报告并下载，也可手动选择日期生成报告
 4. **数据概览**：Dashboard 实时展示今日诊断统计
 5. **外部定时触发**：通过 GitHub Actions 每分钟调用 `/api/scheduled-tasks/trigger-due`，应用层判断到期任务并执行，解决 FaaS 冷休眠导致定时任务不生效的问题

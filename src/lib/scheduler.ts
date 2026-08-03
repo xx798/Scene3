@@ -1,6 +1,5 @@
 import { CronJob } from "cron"
 import { getSupabaseClient } from "@/storage/database/supabase-client"
-import { mergeAndSaveDailyReport } from "./report-generator"
 
 interface TaskConfig {
   id: number
@@ -705,24 +704,6 @@ export async function executeTask(taskId: number, force = false): Promise<void> 
   }
 }
 
-/**
- * 执行每日报告合并任务（18:00 触发）
- */
-async function executeDailyMerge(): Promise<void> {
-  const today = new Date()
-    .toLocaleDateString("zh-CN", {
-      timeZone: "Asia/Shanghai",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    })
-    .replace(/\//g, "-")
-
-  console.log(`[Scheduler] 开始执行每日报告合并: ${today}`)
-  const result = await mergeAndSaveDailyReport(today)
-  console.log(`[Scheduler] 每日报告合并结果: ${result.message}`)
-}
-
 function scheduleTask(task: TaskConfig): void {
   if (jobs.has(task.id)) {
     jobs.get(task.id)?.stop()
@@ -748,8 +729,6 @@ function scheduleTask(task: TaskConfig): void {
   }
 }
 
-let dailyMergeJob: CronJob | null = null
-
 export async function initScheduler(): Promise<void> {
   try {
     const supabase = getSupabaseClient()
@@ -757,21 +736,6 @@ export async function initScheduler(): Promise<void> {
 
     for (const task of tasks || []) {
       scheduleTask(task as TaskConfig)
-    }
-
-    // 每天 18:00 (Asia/Shanghai) 自动合并当日报告
-    if (!dailyMergeJob) {
-      dailyMergeJob = new CronJob(
-        "0 18 * * *",
-        () => {
-          executeDailyMerge().catch(console.error)
-        },
-        null,
-        false,
-        "Asia/Shanghai"
-      )
-      dailyMergeJob.start()
-      console.log("[Scheduler] 每日报告合并任务已注册 (每天 18:00 CST)")
     }
 
     console.log(`[Scheduler] 已加载 ${(tasks || []).length} 个定时任务`)
