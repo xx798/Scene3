@@ -34,38 +34,3 @@ jobs:
           else
             echo "Warning: Unexpected HTTP status $HTTP_CODE"
           fi
-
-  daily-report-merge:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Trigger daily report merge (18:00 CST)
-        env:
-          APP_DOMAIN: ${{ secrets.APP_DOMAIN }}
-          CRON_TOKEN: ${{ secrets.CRON_TRIGGER_TOKEN }}
-        run: |
-          if [ -z "$APP_DOMAIN" ]; then
-            echo "Error: APP_DOMAIN secret is not set"
-            exit 1
-          fi
-
-          # 获取当前 CST 时间，判断是否为 18:00
-          CURRENT_HOUR=$(TZ='Asia/Shanghai' date +%H)
-
-          if [ "$CURRENT_HOUR" != "18" ]; then
-            echo "Not 18:00 CST yet (current hour: $CURRENT_HOUR), skipping daily report merge"
-            exit 0
-          fi
-
-          TODAY=$(TZ='Asia/Shanghai' date +%Y-%m-%d)
-
-          CURL_ARGS="-s -w '\n%{http_code}' -X POST -H 'Content-Type: application/json'"
-
-          if [ -n "$CRON_TOKEN" ]; then
-            CURL_ARGS="$CURL_ARGS -H 'Authorization: Bearer $CRON_TOKEN'"
-          fi
-
-          RESPONSE=$(curl $CURL_ARGS -d "{\"date\": \"$TODAY\"}" "https://$APP_DOMAIN/api/reports/generate")
-          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
-          BODY=$(echo "$RESPONSE" | sed '$d')
-
-          echo "Daily report merge response: $BODY (HTTP $HTTP_CODE)"
