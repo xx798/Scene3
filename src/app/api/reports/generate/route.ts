@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
 import { mergeAndSaveDailyReport } from "@/lib/report-generator"
+import { authenticateRequest } from "@/lib/auth-utils"
 
 export async function POST(request: NextRequest) {
+  const { user, error: authError, status: authStatus } = await authenticateRequest(request);
+  if (!user) return NextResponse.json({ error: authError }, { status: authStatus });
+
   try {
     const body = await request.json()
     const { date } = body

@@ -40,7 +40,10 @@ import {
   XCircle,
   Loader2,
   Calendar,
+  ShieldX,
 } from "lucide-react"
+import { authFetch } from "@/lib/auth-fetch"
+import { useAuth } from "@/components/auth-provider"
 
 interface ScheduledTask {
   id: number
@@ -69,6 +72,7 @@ interface TaskLog {
 }
 
 export default function ScheduledTasksPage() {
+  const { user } = useAuth()
   const [tasks, setTasks] = useState<ScheduledTask[]>([])
   const [loading, setLoading] = useState(true)
   const [createOpen, setCreateOpen] = useState(false)
@@ -81,6 +85,9 @@ export default function ScheduledTasksPage() {
   const [toggling, setToggling] = useState<number | null>(null)
   const [runningTaskIds, setRunningTaskIds] = useState<Set<number>>(new Set())
 
+  // 检查权限（只有管理员可以访问）
+  const hasPermission = user?.role === 'super_admin' || user?.role === 'admin'
+
   // 表单状态
   const [formName, setFormName] = useState("")
   const [formType, setFormType] = useState("bot")
@@ -92,7 +99,7 @@ export default function ScheduledTasksPage() {
 
   const fetchTasks = useCallback(async () => {
     try {
-      const res = await fetch("/api/scheduled-tasks")
+      const res = await authFetch("/api/scheduled-tasks")
       const data = await res.json()
       setTasks(Array.isArray(data) ? data : [])
     } catch {
@@ -120,7 +127,7 @@ export default function ScheduledTasksPage() {
     setLogsOpen(true)
     setLogsLoading(true)
     try {
-      const res = await fetch(`/api/scheduled-tasks/${taskId}/logs?limit=20`)
+      const res = await authFetch(`/api/scheduled-tasks/${taskId}/logs?limit=20`)
       const data = await res.json()
       setLogs(Array.isArray(data) ? data : [])
     } catch {
@@ -174,13 +181,13 @@ export default function ScheduledTasksPage() {
 
     try {
       if (editTask) {
-        await fetch(`/api/scheduled-tasks/${editTask.id}`, {
+        await authFetch(`/api/scheduled-tasks/${editTask.id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         })
       } else {
-        await fetch("/api/scheduled-tasks", {
+        await authFetch("/api/scheduled-tasks", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
@@ -197,7 +204,7 @@ export default function ScheduledTasksPage() {
   const handleDelete = async (id: number) => {
     if (!confirm("确定删除此任务？")) return
     try {
-      await fetch(`/api/scheduled-tasks/${id}`, { method: "DELETE" })
+      await authFetch(`/api/scheduled-tasks/${id}`, { method: "DELETE" })
       fetchTasks()
     } catch (error) {
       console.error("删除失败:", error)
@@ -207,7 +214,7 @@ export default function ScheduledTasksPage() {
   const handleToggle = async (task: ScheduledTask) => {
     setToggling(task.id)
     try {
-      await fetch(`/api/scheduled-tasks/${task.id}`, {
+      await authFetch(`/api/scheduled-tasks/${task.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ is_active: !task.is_active }),
@@ -224,7 +231,7 @@ export default function ScheduledTasksPage() {
     setTriggering(id)
     setRunningTaskIds((prev) => new Set(prev).add(id))
     try {
-      await fetch(`/api/scheduled-tasks/${id}/trigger`, { method: "POST" })
+      await authFetch(`/api/scheduled-tasks/${id}/trigger`, { method: "POST" })
       // 轮询刷新会在 useEffect 中处理，这里延迟清除 triggering
       setTimeout(() => {
         fetchTasks()
@@ -253,6 +260,16 @@ export default function ScheduledTasksPage() {
     { label: "每天早上8点", value: "0 8 * * *" },
     { label: "每天早晚各一次", value: "0 8,18 * * *" },
   ]
+
+  if (!hasPermission) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20">
+        <ShieldX className="h-16 w-16 text-gray-300 mb-4" />
+        <h2 className="text-lg font-semibold text-gray-600 mb-2">无访问权限</h2>
+        <p className="text-sm text-gray-500">定时任务管理仅管理员可访问</p>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">

@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { Activity, AlertTriangle, CheckCircle2, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { subscribeDiagnosisInsert } from '@/lib/browser-supabase-client';
+import { authFetch } from '@/lib/auth-fetch';
 
 interface DashboardStats {
   total: number;
@@ -60,7 +61,7 @@ export default function DashboardPage() {
   const fetchStats = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await fetch('/api/dashboard');
+      const res = await authFetch('/api/dashboard');
       if (!res.ok) throw new Error('Failed to fetch');
       const data = await res.json();
       setStats(data);

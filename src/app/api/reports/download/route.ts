@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getSupabaseClient } from "@/storage/database/supabase-client"
 import { generateDailyExcelReport } from "@/lib/report-generator"
+import { authenticateRequest } from "@/lib/auth-utils"
 import path from "path"
 import fs from "fs"
 
@@ -9,6 +10,9 @@ import fs from "fs"
  * 如果文件不存在或已过期，自动重新生成
  */
 export async function GET(request: NextRequest) {
+  const { user, error: authError, status: authStatus } = await authenticateRequest(request);
+  if (!user) return NextResponse.json({ error: authError }, { status: authStatus });
+
   try {
     const { searchParams } = new URL(request.url)
     const id = searchParams.get("id")
