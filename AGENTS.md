@@ -21,9 +21,10 @@
 │   ├── app/                # 页面路由与布局
 │   │   ├── api/            # 后端 API 路由
 │   │   │   ├── dashboard/  # 数据概览接口 (GET)
+│   │   │   ├── health/     # 健康检查接口 (GET)
 │   │   │   ├── history/    # 诊断记录接口 (GET?date=)
 │   │   │   ├── reports/    # 报告接口 (GET, POST generate)
-│   │   │   └── scheduled-tasks/  # 定时任务管理接口 (CRUD + trigger + logs)
+│   │   │   └── scheduled-tasks/  # 定时任务管理接口 (CRUD + trigger + logs + trigger-due)
 │   │   ├── history/        # 历史诊断列表页
 │   │   ├── reports/        # 报告下载专区页
 │   │   └── scheduled-tasks/  # 定时任务管理页
@@ -94,13 +95,31 @@
 | `/api/scheduled-tasks/[id]` | GET/PUT/DELETE | 单个任务查询/更新/删除 |
 | `/api/scheduled-tasks/[id]/trigger` | POST | 手动触发一次任务 |
 | `/api/scheduled-tasks/[id]/logs?limit=N` | GET | 获取任务执行日志 |
+| `/api/scheduled-tasks/trigger-due` | POST | 外部定时触发器入口，检查并执行到期任务（支持 `?window=5` 补偿窗口） |
+| `/api/health` | GET | 健康检查接口，供心跳保活/探活使用 |
 
 ## 业务流程
 
 1. **定时诊断**：用户在"定时任务管理"页创建任务，配置智能体/工作流 ID 和 cron 表达式。调度引擎按 cron 定时调用扣子 API，解析返回的诊断 JSON 存入 `daily_diagnose_data`
-2. **每日合并**：每天 18:00 (Asia/Shanghai) 自动触发，读取当日所有诊断记录，用 exceljs 生成汇总 Excel，存入 `daily_reports` 表
-3. **报告下载**：用户在"报告下载"页查看历史报告并下载，也可手动选择日期生成报告
-4. **数据概览**：Dashboard 实时展示今日诊断统计
+2. **报告下载**：用户在"报告下载"页查看历史报告并下载，也可手动选择日期生成报告
+3. **数据概览**：Dashboard 实时展示今日诊断统计
+4. **外部定时触发**：通过 GitHub Actions 每分钟调用 `/api/scheduled-tasks/trigger-due`，应用层判断到期任务并执行，解决 FaaS 冷休眠导致定时任务不生效的问题
+
+## 外部定时触发配置
+
+项目通过 GitHub Actions 实现外部定时触发，解决 FaaS 平台无人访问时实例休眠导致定时任务丢失的问题。
+
+### 工作流程
+- `.github/workflows/scheduled-tasks-trigger.yml`：每分钟调用 `/api/scheduled-tasks/trigger-due`
+- 应用层读取 `scheduled_tasks` 表，根据 cron 表达式和 `last_run_at` 判断哪些任务到期
+- 支持 5 分钟补偿窗口，冷启动延迟不会导致任务丢失
+
+### 需要配置的 GitHub Secrets
+- `APP_DOMAIN`：应用域名（如 `example.dev.coze.site`）
+- `CRON_TRIGGER_TOKEN`：（可选）鉴权令牌，对应服务端环境变量 `CRON_TRIGGER_TOKEN`
+
+### 环境变量
+- `CRON_TRIGGER_TOKEN`：（可选）外部触发器的鉴权令牌，配置后请求需携带 `Authorization: Bearer <token>`
 
 ## 诊断智能体
 
