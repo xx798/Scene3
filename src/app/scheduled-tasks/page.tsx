@@ -232,10 +232,15 @@ export default function ScheduledTasksPage() {
     setRunningTaskIds((prev) => new Set(prev).add(id))
     try {
       await authFetch(`/api/scheduled-tasks/${id}/trigger`, { method: "POST" })
-      // 轮询刷新会在 useEffect 中处理，这里延迟清除 triggering
+      // 轮询刷新会在 useEffect 中处理，5 秒后清除执行状态
       setTimeout(() => {
         fetchTasks()
         setTriggering(null)
+        setRunningTaskIds((prev) => {
+          const next = new Set(prev)
+          next.delete(id)
+          return next
+        })
       }, 5000)
     } catch {
       setTriggering(null)
