@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getSupabaseClient } from "@/storage/database/supabase-client"
 import { executeTask } from "@/lib/scheduler"
-import { authenticateRequest, requireAdmin } from "@/lib/auth-utils"
+import { authenticateRequest, requireSuperAdmin } from "@/lib/auth-utils"
 
 export async function POST(
   request: NextRequest,
@@ -10,7 +10,7 @@ export async function POST(
   const { user, error: authError, status: authStatus } = await authenticateRequest(request);
   if (!user) return NextResponse.json({ error: authError }, { status: authStatus });
 
-  const adminCheck = requireAdmin(user);
+  const adminCheck = requireSuperAdmin(user);
   if (adminCheck.error) return NextResponse.json({ error: adminCheck.error }, { status: adminCheck.status });
 
   try {

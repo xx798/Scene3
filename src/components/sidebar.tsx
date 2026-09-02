@@ -29,7 +29,8 @@ function getRoleLabel(role: string): string {
 export function Sidebar() {
   const pathname = usePathname();
   const { user } = useAuth();
-  const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
+  // 只有超级管理员才能看到定时任务和用户管理菜单
+  const isAdmin = user?.role === 'super_admin';
 
   // 合并所有菜单项，管理员菜单追加在后面
   const allNavItems = isAdmin ? [...navItems, ...adminNavItems] : navItems;

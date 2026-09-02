@@ -85,8 +85,8 @@ export default function ScheduledTasksPage() {
   const [toggling, setToggling] = useState<number | null>(null)
   const [runningTaskIds, setRunningTaskIds] = useState<Set<number>>(new Set())
 
-  // 检查权限（只有管理员可以访问）
-  const hasPermission = user?.role === 'super_admin' || user?.role === 'admin'
+  // 检查权限（只有超级管理员可以访问）
+  const hasPermission = user?.role === 'super_admin'
 
   // 表单状态
   const [formName, setFormName] = useState("")
