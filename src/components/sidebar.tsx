@@ -14,8 +14,11 @@ const navItems = [
 ];
 
 const adminNavItems = [
-  { href: '/scheduled-tasks', label: '定时任务', icon: Clock },
   { href: '/admin/users', label: '用户管理', icon: Users },
+];
+
+const superAdminNavItems = [
+  { href: '/scheduled-tasks', label: '定时任务', icon: Clock },
 ];
 
 function getRoleLabel(role: string): string {
@@ -29,11 +32,18 @@ function getRoleLabel(role: string): string {
 export function Sidebar() {
   const pathname = usePathname();
   const { user } = useAuth();
-  // 只有超级管理员才能看到定时任务和用户管理菜单
-  const isAdmin = user?.role === 'super_admin';
+  const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
+  const isSuperAdmin = user?.role === 'super_admin';
 
-  // 合并所有菜单项，管理员菜单追加在后面
-  const allNavItems = isAdmin ? [...navItems, ...adminNavItems] : navItems;
+  // 管理员菜单：admin 和 super_admin 都能看到用户管理
+  // 超级管理员菜单：只有 super_admin 能看到定时任务
+  let allNavItems = [...navItems];
+  if (isAdmin) {
+    allNavItems = [...allNavItems, ...adminNavItems];
+  }
+  if (isSuperAdmin) {
+    allNavItems = [...allNavItems, ...superAdminNavItems];
+  }
 
   return (
     <aside className="fixed left-0 top-0 z-30 flex h-screen w-60 flex-col border-r border-border bg-white">
