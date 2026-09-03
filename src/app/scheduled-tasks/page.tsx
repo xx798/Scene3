@@ -282,9 +282,6 @@ export default function ScheduledTasksPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold">定时任务管理</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            配置定时调用诊断智能体，系统每天 18:00 自动合并当日报告
-          </p>
         </div>
         <Button onClick={openCreate}>
           <Plus className="mr-2 h-4 w-4" />
