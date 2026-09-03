@@ -47,13 +47,8 @@ export function Sidebar() {
 
   return (
     <aside className="fixed left-0 top-0 z-30 flex h-screen w-60 flex-col border-r border-border bg-white">
-      <div className="flex h-16 items-center gap-2.5 border-b border-border px-6">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-sky-500">
-          <span className="text-sm font-bold text-white">巡</span>
-        </div>
-        <div>
-          <h1 className="text-sm font-semibold text-foreground truncate max-w-[140px]">巡检后台中心</h1>
-        </div>
+      <div className="flex h-16 items-center border-b border-border px-6">
+        <h1 className="text-sm font-semibold text-foreground truncate">深小燃地下作业场景后台中心</h1>
       </div>
 
       <nav className="flex-1 space-y-1 px-3 py-4 overflow-y-auto">
