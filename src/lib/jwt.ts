@@ -7,10 +7,11 @@ export interface JwtPayload {
   version: number;
 }
 
-const JWT_SECRET_KEY = 'auth-jwt-secret';
+
 
 function getSecretKey(): Uint8Array {
-  const secret = process.env.COZE_SUPABASE_URL || 'default-jwt-secret-fallback';
+  const secret = process.env.APP_JWT_SECRET;
+  if (!secret || secret.length < 32) throw new Error('APP_JWT_SECRET 至少需要 32 个字符');
   return new TextEncoder().encode(secret);
 }
 
@@ -25,7 +26,7 @@ export async function signToken(payload: JwtPayload, expiresIn = '24h'): Promise
 
 export async function verifyToken(token: string): Promise<JwtPayload | null> {
   try {
-    const { payload } = await jwtVerify(token, getSecretKey());
+    const { payload } = await jwtVerify(token, getSecretKey(), { algorithms: ['HS256'] });
     return {
       userId: payload.userId as number,
       username: payload.username as string,

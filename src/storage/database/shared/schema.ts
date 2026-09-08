@@ -16,7 +16,7 @@ export const users = pgTable(
 );
 
 export const healthCheck = pgTable("health_check", {
-	id: serial().notNull(),
+	id: serial().primaryKey(),
 	updatedAt: timestamp("updated_at", { withTimezone: true, mode: 'string' }).defaultNow(),
 });
 
@@ -25,10 +25,10 @@ export const dailyDiagnoseData = pgTable(
 	{
 		id: serial().primaryKey(),
 		diagnose_time: timestamp("diagnose_time", { withTimezone: true }).notNull(),
-		camera_id: varchar("camera_id", { length: 100 }),
-		site_name_watermark: varchar("site_name_watermark", { length: 255 }),
-		camera_status: varchar("camera_status", { length: 50 }).notNull().default("正常"),
-		camera_abnormal_desc: text("camera_abnormal_desc"),
+		camera_id: text("camera_id"),
+		site_name_watermark: text("site_name_watermark"),
+		camera_status: varchar("camera_status", { length: 50 }).default("正常"),
+		camera_abnormal_desc: text("camera_abnormal_desc").default("正常"),
 		risk_items: jsonb("risk_items"),
 		capture_time: timestamp("capture_time", { withTimezone: true }),
 		image_url: text("image_url"),
@@ -38,8 +38,10 @@ export const dailyDiagnoseData = pgTable(
 	(table) => [
 		index("daily_diagnose_data_diagnose_time_idx").on(table.diagnose_time),
 		index("daily_diagnose_data_status_idx").on(table.status),
-		index("daily_diagnose_data_camera_id_idx").on(table.camera_id),
-		index("daily_diagnose_data_capture_time_idx").on(table.capture_time),
+		index("idx_daily_diagnose_camera_id").on(table.camera_id),
+		index("idx_daily_diagnose_capture_time").on(table.capture_time),
+		index("idx_daily_diagnose_site_name").on(table.site_name_watermark),
+		index("idx_daily_diagnose_camera_status").on(table.camera_status),
 		index("daily_diagnose_data_created_at_idx").on(table.created_at),
 	]
 );
@@ -60,10 +62,7 @@ export const scheduledTasks = pgTable(
 		next_run_at: timestamp("next_run_at", { withTimezone: true }),
 		created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 		updated_at: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-	},
-	(table) => [
-		index("scheduled_tasks_is_active_idx").on(table.is_active),
-	]
+	}
 );
 
 export const dailyReports = pgTable(
@@ -95,9 +94,5 @@ export const taskExecutionLogs = pgTable(
 		error_message: text("error_message"),
 		started_at: timestamp("started_at", { withTimezone: true }).defaultNow().notNull(),
 		completed_at: timestamp("completed_at", { withTimezone: true }),
-	},
-	(table) => [
-		index("task_execution_logs_task_id_idx").on(table.task_id),
-		index("task_execution_logs_started_at_idx").on(table.started_at),
-	]
+	}
 );

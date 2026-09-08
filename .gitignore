@@ -163,3 +163,11 @@ Desktop.ini
 # Misc
 .coze-logs
 .codegraph/
+
+.env.*
+!.env.example
+/data/
+/backups/
+db-backup-*.sql
+/supabase/.temp/
+/supabase/.branches/

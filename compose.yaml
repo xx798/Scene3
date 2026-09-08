@@ -1,0 +1,25 @@
+services:
+  app:
+    build: .
+    ports:
+      - '127.0.0.1:5000:5000'
+    env_file: .env.production
+    environment:
+      NODE_ENV: production
+      HOSTNAME: 0.0.0.0
+      REPORTS_DIR: /app/data/reports
+    volumes:
+      - reports:/app/data/reports
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD', 'node', '-e', "fetch('http://127.0.0.1:5000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 20s
+      start_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+volumes:
+  reports:

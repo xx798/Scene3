@@ -10,7 +10,7 @@ import { useAuth } from '@/components/auth-provider';
 import { authFetch } from '@/lib/auth-fetch';
 
 export default function ProfilePage() {
-  const { user, refreshUser } = useAuth();
+  const { user, refreshUser, logout } = useAuth();
   const [name, setName] = useState('');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -33,7 +33,7 @@ export default function ProfilePage() {
     setMessage(null);
     
     try {
-      const res = await authFetch(`/api/users/${user.userId}`, {
+      const res = await authFetch('/api/profile', {
         method: 'PUT',
         body: JSON.stringify({ name: name.trim() }),
       });
@@ -72,20 +72,9 @@ export default function ProfilePage() {
     setMessage(null);
     
     try {
-      // 先验证当前密码
-      const verifyRes = await authFetch('/api/auth/login', {
-        method: 'POST',
-        body: JSON.stringify({ username: user?.username, password: currentPassword }),
-      });
-      
-      if (!verifyRes.ok) {
-        throw new Error('当前密码错误');
-      }
-      
-      // 更新密码
-      const res = await authFetch(`/api/users/${user?.userId}`, {
+      const res = await authFetch('/api/profile', {
         method: 'PUT',
-        body: JSON.stringify({ password: newPassword }),
+        body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
       });
       
       if (!res.ok) {
@@ -96,7 +85,7 @@ export default function ProfilePage() {
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
-      setMessage({ type: 'success', text: '密码更新成功' });
+      logout();
     } catch (err) {
       setMessage({ type: 'error', text: err instanceof Error ? err.message : '更新失败' });
     } finally {

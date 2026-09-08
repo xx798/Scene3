@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getSupabaseClient } from "@/storage/database/supabase-client"
 import { generateDailyExcelReport } from "@/lib/report-generator"
 import { authenticateRequest } from "@/lib/auth-utils"
-import path from "path"
+import { getReportPath } from '@/lib/report-storage';
 import fs from "fs"
 
 /**
@@ -35,11 +35,7 @@ export async function GET(request: NextRequest) {
     }
 
     // 根据环境确定文件路径
-    const isProd = process.env.COZE_PROJECT_ENV === "PROD"
-    const reportsDir = isProd
-      ? path.join("/tmp", "reports")
-      : path.join(process.cwd(), "public", "reports")
-    const filePath = path.join(reportsDir, report.file_name)
+    let filePath = getReportPath(report.file_name)
 
     // 检查文件是否存在且未过期（24小时内）
     let needRegenerate = false
@@ -58,6 +54,7 @@ export async function GET(request: NextRequest) {
     if (needRegenerate) {
       console.log(`[Download] 文件不存在或已过期，重新生成: ${report.file_name}`)
       const result = await generateDailyExcelReport(report.report_date)
+      filePath = getReportPath(result.file_name)
       if (result.total_count === 0) {
         return NextResponse.json(
           { error: "当日无诊断记录，无法生成报告" },

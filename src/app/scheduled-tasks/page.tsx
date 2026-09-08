@@ -304,7 +304,7 @@ export default function ScheduledTasksPage() {
             </div>
           ) : tasks.length === 0 ? (
             <div className="py-8 text-center text-sm text-muted-foreground">
-              暂无定时任务，点击"新建任务"创建
+              暂无定时任务，点击“新建任务”创建
             </div>
           ) : (
             <Table>

@@ -13,6 +13,7 @@ export async function POST(request: NextRequest) {
   try {
     // 可选鉴权：如果配置了 CRON_TRIGGER_TOKEN，则要求请求携带
     const expectedToken = process.env.CRON_TRIGGER_TOKEN
+    if (!expectedToken) return NextResponse.json({ error: '外部定时触发未启用' }, { status: 503 });
     if (expectedToken) {
       const authHeader = request.headers.get("authorization")
       const bearerToken = authHeader?.replace("Bearer ", "")
@@ -25,6 +26,7 @@ export async function POST(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const windowMinutes = parseInt(searchParams.get("window") || "5", 10)
 
+    if (!Number.isInteger(windowMinutes) || windowMinutes < 1 || windowMinutes > 60) return NextResponse.json({ error: 'window 必须为 1–60 分钟' }, { status: 400 });
     const result = await checkAndExecuteDueTasks(windowMinutes)
 
     return NextResponse.json({

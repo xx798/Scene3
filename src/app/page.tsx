@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useState, useCallback } from 'react';
 import { Activity, AlertTriangle, CheckCircle2, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { subscribeDiagnosisInsert } from '@/lib/browser-supabase-client';
+import { usePolling } from '@/hooks/use-polling';
 import { authFetch } from '@/lib/auth-fetch';
 
 interface DashboardStats {
@@ -58,47 +58,20 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats>({ total: 0, abnormal: 0, normal: 0 });
   const [loading, setLoading] = useState(true);
 
-  const fetchStats = useCallback(async () => {
+  const fetchStats = useCallback(async (signal: AbortSignal) => {
     try {
-      setLoading(true);
-      const res = await authFetch('/api/dashboard');
+      const res = await authFetch('/api/dashboard', { signal });
       if (!res.ok) throw new Error('Failed to fetch');
       const data = await res.json();
-      setStats(data);
+      if (!signal.aborted) setStats(data);
     } catch {
       // silent
     } finally {
-      setLoading(false);
+      if (!signal.aborted) setLoading(false);
     }
   }, []);
 
-  const cleanupRef = useRef<(() => void) | null>(null);
-
-  useEffect(() => {
-    fetchStats();
-
-    // 订阅数据库 INSERT 事件，新诊断记录写入后自动刷新
-    let cancelled = false;
-    subscribeDiagnosisInsert(() => {
-      if (!cancelled) fetchStats();
-    }).then((unsubscribe) => {
-      if (cancelled) {
-        unsubscribe();
-      } else {
-        cleanupRef.current = unsubscribe;
-      }
-    }).catch(() => {
-      // Realtime 订阅失败时静默处理，页面仍可手动刷新
-    });
-
-    return () => {
-      cancelled = true;
-      if (cleanupRef.current) {
-        cleanupRef.current();
-        cleanupRef.current = null;
-      }
-    };
-  }, [fetchStats]);
+  usePolling(fetchStats);
 
   const today = new Date().toLocaleDateString('zh-CN', {
     year: 'numeric',

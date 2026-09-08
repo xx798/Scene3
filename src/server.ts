@@ -3,7 +3,10 @@ import { parse } from 'url';
 import next from 'next';
 import { initScheduler } from '@/lib/scheduler';
 
-const dev = process.env.COZE_PROJECT_ENV !== 'PROD';
+import { loadEnvConfig } from '@next/env';
+
+const dev = process.env.NODE_ENV !== 'production';
+loadEnvConfig(process.cwd(), dev);
 const hostname = process.env.HOSTNAME || 'localhost';
 const port = parseInt(process.env.PORT || '5000', 10);
 
@@ -13,7 +16,7 @@ const handle = app.getRequestHandler();
 
 app.prepare().then(() => {
   // Initialize the task scheduler after Next.js is ready
-  initScheduler().catch((err) => {
+  if (process.env.SCHEDULER_ENABLED !== 'false') initScheduler().catch((err) => {
     console.error('[Server] 调度引擎初始化失败:', err);
   });
 
@@ -31,10 +34,10 @@ app.prepare().then(() => {
     console.error(err);
     process.exit(1);
   });
-  server.listen(port, () => {
+  server.listen(port, hostname, () => {
     console.log(
       `> Server listening at http://${hostname}:${port} as ${
-        dev ? 'development' : process.env.COZE_PROJECT_ENV
+        dev ? 'development' : 'production'
       }`,
     );
   });

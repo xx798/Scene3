@@ -1,5 +1,6 @@
 import ExcelJS from "exceljs"
-import path from "path"
+import { shanghaiDayRange } from './time';
+import { getReportPath, getReportsDir } from '@/lib/report-storage';
 import fs from "fs"
 import { getSupabaseClient } from "@/storage/database/supabase-client"
 
@@ -17,14 +18,13 @@ export async function generateDailyExcelReport(reportDate: string): Promise<{
   const supabase = getSupabaseClient()
 
   // 查询当日所有诊断记录
-  const startOfDay = `${reportDate}T00:00:00+08:00`
-  const endOfDay = `${reportDate}T23:59:59+08:00`
+  const { start: startOfDay, end: endOfDay } = shanghaiDayRange(reportDate);
 
   const { data: records, error } = await supabase
     .from("daily_diagnose_data")
     .select("*")
     .gte("diagnose_time", startOfDay)
-    .lte("diagnose_time", endOfDay)
+    .lt("diagnose_time", endOfDay)
     .order("diagnose_time", { ascending: true })
 
   if (error) {
@@ -195,20 +195,17 @@ export async function generateDailyExcelReport(reportDate: string): Promise<{
   })
 
   // 保存文件（生产环境使用 /tmp，开发环境使用 public/reports）
-  const isProd = process.env.COZE_PROJECT_ENV === "PROD"
-  const reportsDir = isProd
-    ? path.join("/tmp", "reports")
-    : path.join(process.cwd(), "public", "reports")
+  const reportsDir = getReportsDir()
   if (!fs.existsSync(reportsDir)) {
     fs.mkdirSync(reportsDir, { recursive: true })
   }
 
   const fileName = `诊断日报_${reportDate}.xlsx`
-  const filePath = path.join(reportsDir, fileName)
+  const filePath = getReportPath(fileName)
   await workbook.xlsx.writeFile(filePath)
 
   // 生产环境返回 /tmp 路径，开发环境返回 /reports 路径
-  const url = isProd ? `file://${filePath}` : `/reports/${fileName}`
+  const url = `report:${fileName}`
 
   return {
     url,

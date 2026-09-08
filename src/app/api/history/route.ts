@@ -1,3 +1,4 @@
+import { shanghaiDayRange } from '@/lib/time';
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { authenticateRequest } from '@/lib/auth-utils';
@@ -19,14 +20,13 @@ export async function GET(request: NextRequest) {
     const client = getSupabaseClient();
 
     // Build date range for the selected date
-    const dayStart = new Date(`${date}T00:00:00+08:00`);
-    const dayEnd = new Date(`${date}T23:59:59+08:00`);
+    const { start, end } = shanghaiDayRange(date);
 
     const { data, error } = await client
       .from('daily_diagnose_data')
       .select('id, diagnose_time, camera_id, site_name_watermark, camera_status, camera_abnormal_desc, risk_items, capture_time, image_url, status')
-      .gte('diagnose_time', dayStart.toISOString())
-      .lte('diagnose_time', dayEnd.toISOString())
+      .gte('diagnose_time', start)
+      .lt('diagnose_time', end)
       .order('diagnose_time', { ascending: false });
 
     if (error) throw new Error(`查询失败: ${error.message}`);

@@ -215,7 +215,7 @@ export default function ReportsPage() {
               <FileSpreadsheet className="h-12 w-12 text-muted-foreground/50" />
               <p className="mt-4 text-sm text-muted-foreground">暂无报告</p>
               <p className="text-xs text-muted-foreground/70 mt-1">
-                选择日期并点击"生成报告"来创建每日汇总报告
+                选择日期并点击“生成报告”来创建每日汇总报告
               </p>
             </div>
           ) : (

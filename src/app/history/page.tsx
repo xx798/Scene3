@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useState, useCallback } from 'react';
 import { Calendar, Search, Loader2, Image as ImageIcon, ChevronDown, ChevronUp, Video, MapPin } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { subscribeDiagnosisInsert } from '@/lib/browser-supabase-client';
+import { usePolling } from '@/hooks/use-polling';
+import { shanghaiDate } from '@/lib/time';
 import { authFetch } from '@/lib/auth-fetch';
 
 interface RiskItem {
@@ -165,50 +166,23 @@ export default function HistoryPage() {
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(() => {
     const d = new Date();
-    return d.toISOString().split('T')[0];
+    return shanghaiDate(d);
   });
 
-  const fetchRecords = useCallback(async (date: string) => {
+  const fetchRecords = useCallback(async (signal: AbortSignal) => {
     try {
-      setLoading(true);
-      const res = await authFetch(`/api/history?date=${date}`);
+      const res = await authFetch(`/api/history?date=${selectedDate}`, { signal });
       if (!res.ok) throw new Error('Failed to fetch');
       const data = await res.json();
-      setRecords(data);
+      if (!signal.aborted) setRecords(data);
     } catch {
-      setRecords([]);
+      if (!signal.aborted) setRecords([]);
     } finally {
-      setLoading(false);
+      if (!signal.aborted) setLoading(false);
     }
-  }, []);
+  }, [selectedDate]);
 
-  const cleanupRef = useRef<(() => void) | null>(null);
-
-  useEffect(() => {
-    fetchRecords(selectedDate);
-
-    // 订阅数据库 INSERT 事件，新诊断记录写入后自动刷新当前日期的列表
-    let cancelled = false;
-    subscribeDiagnosisInsert(() => {
-      if (!cancelled) fetchRecords(selectedDate);
-    }).then((unsubscribe) => {
-      if (cancelled) {
-        unsubscribe();
-      } else {
-        cleanupRef.current = unsubscribe;
-      }
-    }).catch(() => {
-      // Realtime 订阅失败时静默处理
-    });
-
-    return () => {
-      cancelled = true;
-      if (cleanupRef.current) {
-        cleanupRef.current();
-        cleanupRef.current = null;
-      }
-    };
-  }, [selectedDate, fetchRecords]);
+  usePolling(fetchRecords);
 
   const formatTime = (dateStr: string) => {
     const d = new Date(dateStr);

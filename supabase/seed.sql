@@ -1,0 +1,1 @@
+-- Intentionally empty. Restore private data with pnpm db:restore <file>.

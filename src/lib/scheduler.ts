@@ -1,4 +1,5 @@
 import { CronJob } from "cron"
+import { isCronDueInWindow } from "./cron-due"
 import { getSupabaseClient } from "@/storage/database/supabase-client"
 
 interface TaskConfig {
@@ -14,10 +15,14 @@ interface TaskConfig {
   last_run_at: string | null
 }
 
-const jobs = new Map<number, CronJob>()
+const schedulerGlobal = globalThis as typeof globalThis & {
+  scene3Scheduler?: { jobs: Map<number, CronJob>; controllers: Map<number, AbortController> }
+};
+const state = schedulerGlobal.scene3Scheduler ??= { jobs: new Map(), controllers: new Map() };
+const jobs = state.jobs
 
 // 追踪正在执行的任务的 AbortController，用于暂停时强制中止
-const runningControllers = new Map<number, AbortController>()
+const runningControllers = state.controllers
 
 /**
  * 中止正在执行的任务
@@ -26,7 +31,6 @@ export function abortTask(taskId: number): void {
   const controller = runningControllers.get(taskId)
   if (controller) {
     controller.abort()
-    runningControllers.delete(taskId)
     console.log(`[Scheduler] 任务 ${taskId} 已被中止`)
   }
 }
@@ -322,7 +326,7 @@ async function saveDiagnosisResult(data: Record<string, unknown>): Promise<void>
   const isCameraAbnormal = data.camera_status && data.camera_status !== "正常"
   const status = hasAbnormal || isCameraAbnormal ? "abnormal" : "normal"
 
-  await supabase.from("daily_diagnose_data").insert({
+  const { error } = await supabase.from("daily_diagnose_data").insert({
     diagnose_time: new Date().toISOString(),
     camera_id: (data.camera_id as string) || null,
     site_name_watermark: (data.site_name_watermark as string) || null,
@@ -333,6 +337,7 @@ async function saveDiagnosisResult(data: Record<string, unknown>): Promise<void>
     image_url: (data.image_url as string) || null,
     status,
   })
+  if (error) throw new Error(`诊断入库失败: ${error.message}`)
 }
 
 /**
@@ -350,7 +355,8 @@ function replaceTemplateVars(template: string): string {
  * 调用扣子 Bot API
  */
 async function callCozeBot(botId: string, message: string, signal?: AbortSignal): Promise<string> {
-  const token = process.env.COZE_WORKLOAD_API_TOKEN
+  const token = process.env.COZE_API_TOKEN || process.env.COZE_WORKLOAD_API_TOKEN
+  if (!token) throw new Error('请在 .env.local 配置 COZE_API_TOKEN 后执行诊断')
   const baseUrl = process.env.COZE_API_BASE_URL || "https://api.coze.cn"
 
   const response = await fetch(`${baseUrl}/v3/chat`, {
@@ -422,7 +428,8 @@ async function callCozeWorkflow(
   parameters: Record<string, unknown>,
   externalSignal?: AbortSignal
 ): Promise<Record<string, unknown>> {
-  const token = process.env.COZE_WORKLOAD_API_TOKEN
+  const token = process.env.COZE_API_TOKEN || process.env.COZE_WORKLOAD_API_TOKEN
+  if (!token) throw new Error('请在 .env.local 配置 COZE_API_TOKEN 后执行诊断')
   const baseUrl = process.env.COZE_API_BASE_URL || "https://api.coze.cn"
 
   const controller = new AbortController()
@@ -636,6 +643,10 @@ async function executeDiagnosisTask(
  * @param force 是否强制执行（忽略 is_active 检查，用于手动触发）
  */
 export async function executeTask(taskId: number, force = false): Promise<void> {
+  if (runningControllers.has(taskId)) return;
+  const controller = new AbortController();
+  runningControllers.set(taskId, controller);
+  try {
   const supabase = getSupabaseClient()
 
   const { data: tasks, error } = await supabase
@@ -650,8 +661,7 @@ export async function executeTask(taskId: number, force = false): Promise<void> 
   if (!force && !task.is_active) return
 
   // 创建 AbortController 用于追踪和中止
-  const controller = new AbortController()
-  runningControllers.set(taskId, controller)
+
 
   // 记录执行日志
   const { data: logEntry } = await supabase
@@ -699,8 +709,9 @@ export async function executeTask(taskId: number, force = false): Promise<void> 
         })
         .eq("id", logEntry[0].id)
     }
+  }
   } finally {
-    runningControllers.delete(taskId)
+    if (runningControllers.get(taskId) === controller) runningControllers.delete(taskId);
   }
 }
 
@@ -710,7 +721,7 @@ function scheduleTask(task: TaskConfig): void {
     jobs.delete(task.id)
   }
 
-  if (!task.is_active) return
+  if (!task.is_active || process.env.SCHEDULER_ENABLED === "false") return
 
   try {
     const job = new CronJob(
@@ -732,7 +743,8 @@ function scheduleTask(task: TaskConfig): void {
 export async function initScheduler(): Promise<void> {
   try {
     const supabase = getSupabaseClient()
-    const { data: tasks } = await supabase.from("scheduled_tasks").select("*")
+    const { data: tasks, error } = await supabase.from("scheduled_tasks").select("*")
+    if (error) throw error
 
     for (const task of tasks || []) {
       scheduleTask(task as TaskConfig)
@@ -778,54 +790,6 @@ export function getLoadedTaskIds(): number[] {
  * 检查 cron 表达式在给定时间窗口内是否有触发点
  * 用于判断任务是否到期（支持冷启动补偿）
  */
-function isCronDueInWindow(
-  cronExpression: string,
-  lastRunAt: string | null,
-  windowMinutes: number = 5
-): boolean {
-  try {
-    const now = new Date()
-    const windowStart = new Date(now.getTime() - windowMinutes * 60 * 1000)
-
-    const job = new CronJob(
-      cronExpression,
-      () => {},
-      null,
-      false,
-      "Asia/Shanghai"
-    )
-
-    // 从窗口起始时间开始，逐步检查每个触发点
-    let checkTime = new Date(windowStart)
-    // 对齐到秒（CronJob 精度为秒）
-    checkTime.setMilliseconds(0)
-
-    while (checkTime <= now) {
-      const nextDate = job.nextDate()
-      if (!nextDate) break
-
-      const nextFire = nextDate.toJSDate()
-      if (nextFire > now) break
-
-      // 找到了一个在窗口内的触发点
-      if (nextFire >= windowStart && nextFire <= now) {
-        // 如果 last_run_at 在这个触发点之前（或为空），说明该任务到期了
-        if (!lastRunAt) return true
-        const lastRun = new Date(lastRunAt)
-        if (lastRun < nextFire) return true
-      }
-
-      // 推进到下一个触发点之后继续检查
-      checkTime = new Date(nextFire.getTime() + 1000)
-    }
-
-    return false
-  } catch {
-    // cron 表达式无效，跳过
-    return false
-  }
-}
-
 /**
  * 检查所有活跃的定时任务，执行到期的任务
  * 供外部定时触发器（如 GitHub Actions）每分钟调用
