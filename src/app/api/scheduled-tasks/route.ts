@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getSupabaseClient } from "@/storage/database/supabase-client"
 import { reloadTask } from "@/lib/scheduler"
+import { validateHiaConfig } from "@/lib/hia-workflow"
+import { sanitizeScheduledTask, sanitizeScheduledTasks } from "@/lib/scheduled-task-secret"
 import { authenticateRequest, requireSuperAdmin } from "@/lib/auth-utils"
 
 export async function GET(request: NextRequest) {
@@ -18,7 +20,7 @@ export async function GET(request: NextRequest) {
       .order("created_at", { ascending: true })
 
     if (error) throw error
-    return NextResponse.json(data || [])
+    return NextResponse.json(sanitizeScheduledTasks(data || []))
   } catch (error) {
     return NextResponse.json({ error: "查询失败" }, { status: 500 })
   }
@@ -34,6 +36,10 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const { name, task_type, bot_id, workflow_id, cron_expression, prompt_template, workflow_parameters, is_active } = body
+    if (task_type === "hia_workflow") {
+      const invalid = validateHiaConfig(workflow_id, bot_id, workflow_parameters)
+      if (invalid) return NextResponse.json({ error: invalid }, { status: 400 })
+    }
 
     if (!name || !cron_expression) {
       return NextResponse.json({ error: "缺少必填字段" }, { status: 400 })
@@ -61,7 +67,7 @@ export async function POST(request: NextRequest) {
       await reloadTask(data[0].id)
     }
 
-    return NextResponse.json(data?.[0] || {})
+    return NextResponse.json(data?.[0] ? sanitizeScheduledTask(data[0]) : {})
   } catch (error) {
     return NextResponse.json({ error: "创建失败" }, { status: 500 })
   }

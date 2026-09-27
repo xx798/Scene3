@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getSupabaseClient } from "@/storage/database/supabase-client"
 import { reloadTask, stopTask, abortTask } from "@/lib/scheduler"
+import { validateHiaConfig } from "@/lib/hia-workflow"
+import { sanitizeScheduledTask } from "@/lib/scheduled-task-secret"
 import { authenticateRequest, requireSuperAdmin } from "@/lib/auth-utils"
 
 export async function GET(
@@ -26,7 +28,7 @@ export async function GET(
     if (!data || data.length === 0) {
       return NextResponse.json({ error: "任务不存在" }, { status: 404 })
     }
-    return NextResponse.json(data[0])
+    return NextResponse.json(sanitizeScheduledTask(data[0]))
   } catch (error) {
     return NextResponse.json({ error: "查询失败" }, { status: 500 })
   }
@@ -44,13 +46,30 @@ export async function PUT(
 
   try {
     const { id } = await params
-    const body = await request.json()
+    const body: Record<string, unknown> = await request.json()
 
     const supabase = getSupabaseClient()
+    const { data: current, error: readError } = await supabase.from("scheduled_tasks").select("*").eq("id", parseInt(id)).maybeSingle()
+    if (readError) throw readError
+    if (!current) return NextResponse.json({ error: "任务不存在" }, { status: 404 })
+    const allowedFields = ["name", "task_type", "bot_id", "workflow_id", "cron_expression", "prompt_template", "workflow_parameters", "is_active"]
+    const updateBody: Record<string, unknown> = {}
+    for (const field of allowedFields) if (field in body) updateBody[field] = body[field]
+
+    const nextType = typeof updateBody.task_type === "string" ? updateBody.task_type : current.task_type
+    if (nextType === "hia_workflow" &&
+        (typeof updateBody.workflow_id !== "string" || !updateBody.workflow_id.trim())) {
+      if (current.task_type === "hia_workflow" && current.workflow_id) delete updateBody.workflow_id
+    }
+    const merged = { ...current, ...updateBody }
+    if (merged.task_type === "hia_workflow") {
+      const invalid = validateHiaConfig(merged.workflow_id, merged.bot_id, merged.workflow_parameters)
+      if (invalid) return NextResponse.json({ error: invalid }, { status: 400 })
+    }
     const { data, error } = await supabase
       .from("scheduled_tasks")
       .update({
-        ...body,
+        ...updateBody,
         updated_at: new Date().toISOString(),
       })
       .eq("id", parseInt(id))
@@ -70,7 +89,7 @@ export async function PUT(
       await stopTask(data[0].id)
     }
 
-    return NextResponse.json(data[0])
+    return NextResponse.json(sanitizeScheduledTask(data[0]))
   } catch (error) {
     return NextResponse.json({ error: "更新失败" }, { status: 500 })
   }

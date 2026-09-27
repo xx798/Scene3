@@ -55,6 +55,7 @@ interface ScheduledTask {
   prompt_template: string
   workflow_parameters: string
   is_active: boolean
+  has_hia_api_key?: boolean
   last_run_at: string | null
   created_at: string
   updated_at: string
@@ -70,6 +71,9 @@ interface TaskLog {
   started_at: string
   completed_at: string | null
 }
+
+const DEFAULT_HIA_API_URL = "https://hiagent.deyunai.com/api/proxy/api/v1/sync_run_app_workflow"
+const MASKED_HIA_API_KEY = "••••••••••••"
 
 export default function ScheduledTasksPage() {
   const { user } = useAuth()
@@ -96,6 +100,9 @@ export default function ScheduledTasksPage() {
   const [formCron, setFormCron] = useState("")
   const [formPrompt, setFormPrompt] = useState("")
   const [formWorkflowParams, setFormWorkflowParams] = useState("")
+  const [formError, setFormError] = useState("")
+  const [saving, setSaving] = useState(false)
+  const hasNewHiaApiKey = !!formWorkflowId.trim() && formWorkflowId !== MASKED_HIA_API_KEY
 
   const fetchTasks = useCallback(async () => {
     try {
@@ -138,6 +145,7 @@ export default function ScheduledTasksPage() {
   }
 
   const resetForm = () => {
+    setFormError("")
     setFormName("")
     setFormType("bot")
     setFormBotId("")
@@ -154,10 +162,11 @@ export default function ScheduledTasksPage() {
   }
 
   const openEdit = (task: ScheduledTask) => {
+    setFormError("")
     setFormName(task.name)
     setFormType(task.task_type)
-    setFormBotId(task.bot_id || "")
-    setFormWorkflowId(task.workflow_id || "")
+    setFormBotId(task.task_type === "hia_workflow" ? task.bot_id || DEFAULT_HIA_API_URL : task.bot_id || "")
+    setFormWorkflowId(task.task_type === "hia_workflow" && task.has_hia_api_key ? MASKED_HIA_API_KEY : task.workflow_id || "")
     setFormCron(task.cron_expression)
     setFormPrompt(task.prompt_template || "")
     setFormWorkflowParams(task.workflow_parameters || "")
@@ -171,33 +180,35 @@ export default function ScheduledTasksPage() {
     const payload = {
       name: formName,
       task_type: formType,
-      bot_id: formType === "bot" ? formBotId : null,
-      workflow_id: formType === "workflow" ? formWorkflowId : null,
+      bot_id: formType === "bot" || formType === "hia_workflow" ? formBotId.trim() : null,
+      ...(formType === "hia_workflow" && editTask?.has_hia_api_key && !hasNewHiaApiKey
+        ? {}
+        : { workflow_id: formType === "hia_workflow" ? formWorkflowId.trim() : formType === "workflow" ? formWorkflowId : null }),
       cron_expression: formCron,
       prompt_template: formPrompt,
-      workflow_parameters: formWorkflowParams,
-      is_active: true,
+      workflow_parameters: formType === "hia_workflow" ? (formWorkflowParams || '{"limit":0}') : formWorkflowParams,
+      is_active: editTask?.is_active ?? true,
     }
 
     try {
-      if (editTask) {
-        await authFetch(`/api/scheduled-tasks/${editTask.id}`, {
-          method: "PUT",
+      setSaving(true)
+      setFormError("")
+      const res = await authFetch(editTask ? `/api/scheduled-tasks/${editTask.id}` : "/api/scheduled-tasks", {
+          method: editTask ? "PUT" : "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         })
-      } else {
-        await authFetch("/api/scheduled-tasks", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        })
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || "保存失败")
       }
       setCreateOpen(false)
       resetForm()
       fetchTasks()
     } catch (error) {
-      console.error("保存失败:", error)
+      setFormError(error instanceof Error ? error.message : "保存失败")
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -324,7 +335,7 @@ export default function ScheduledTasksPage() {
                     <TableCell className="font-medium">{task.name}</TableCell>
                     <TableCell>
                       <Badge variant="outline" className="text-xs">
-                        {task.task_type === "bot" ? "智能体" : "工作流"}
+                        {task.task_type === "bot" ? "扣子智能体" : task.task_type === "hia_workflow" ? "HIA 工作流" : "扣子工作流"}
                       </Badge>
                     </TableCell>
                     <TableCell className="font-mono text-xs">{task.cron_expression}</TableCell>
@@ -425,13 +436,19 @@ export default function ScheduledTasksPage() {
 
             <div className="space-y-2">
               <Label>任务类型</Label>
-              <Select value={formType} onValueChange={setFormType}>
+              <Select value={formType} onValueChange={(value) => {
+                setFormType(value)
+                setFormBotId(value === "hia_workflow" ? DEFAULT_HIA_API_URL : "")
+                setFormWorkflowId("")
+                setFormWorkflowParams(value === "hia_workflow" ? '{"limit":0}' : "")
+              }}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="bot">智能体</SelectItem>
-                  <SelectItem value="workflow">工作流</SelectItem>
+                  <SelectItem value="workflow">扣子工作流</SelectItem>
+                  <SelectItem value="hia_workflow">HIA 工作流</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -445,7 +462,7 @@ export default function ScheduledTasksPage() {
                   placeholder="输入扣子智能体 ID"
                 />
               </div>
-            ) : (
+            ) : formType === "workflow" ? (
               <div className="space-y-2">
                 <Label>工作流 Workflow ID</Label>
                 <Input
@@ -453,6 +470,35 @@ export default function ScheduledTasksPage() {
                   onChange={(e) => setFormWorkflowId(e.target.value)}
                   placeholder="输入扣子工作流 ID"
                 />
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label>HIA API 地址</Label>
+                  <Input
+                    type="url"
+                    value={formBotId}
+                    onChange={(e) => setFormBotId(e.target.value)}
+                    placeholder={DEFAULT_HIA_API_URL}
+                    className="font-mono"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>HIA API Key</Label>
+                  <Input
+                    type="password"
+                    autoComplete="new-password"
+                    value={formWorkflowId}
+                    onFocus={() => {
+                      if (formWorkflowId === MASKED_HIA_API_KEY) setFormWorkflowId("")
+                    }}
+                    onBlur={() => {
+                      if (!formWorkflowId && editTask?.has_hia_api_key) setFormWorkflowId(MASKED_HIA_API_KEY)
+                    }}
+                    onChange={(e) => setFormWorkflowId(e.target.value)}
+                    placeholder={editTask?.has_hia_api_key ? MASKED_HIA_API_KEY : "输入 HIA API Key"}
+                  />
+                </div>
               </div>
             )}
 
@@ -494,18 +540,19 @@ export default function ScheduledTasksPage() {
                 <textarea
                   value={formWorkflowParams}
                   onChange={(e) => setFormWorkflowParams(e.target.value)}
-                  placeholder='{"input": "value"} 支持 {{now}} {{date}} {{timestamp}} 变量'
+                  placeholder={formType === "hia_workflow" ? '{"limit":0}' : '{"input": "value"} 支持 {{now}} {{date}} {{timestamp}} 变量'}
                   className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono"
                 />
               </div>
             )}
 
+            {formError && <p role="alert" className="text-sm text-destructive">{formError}</p>}
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setCreateOpen(false)}>
                 取消
               </Button>
-              <Button onClick={handleSave} disabled={!formName || !formCron}>
-                {editTask ? "保存" : "创建"}
+              <Button onClick={handleSave} disabled={saving || !formName || !formCron || (formType === "hia_workflow" && (!formBotId.trim() || (!editTask?.has_hia_api_key && !hasNewHiaApiKey)))}>
+                {saving ? "保存中…" : editTask ? "保存" : "创建"}
               </Button>
             </div>
           </div>

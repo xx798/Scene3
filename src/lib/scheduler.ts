@@ -1,4 +1,5 @@
 import { CronJob } from "cron"
+import { callHiaWorkflow } from "./hia-workflow"
 import { isCronDueInWindow } from "./cron-due"
 import { getSupabaseClient } from "@/storage/database/supabase-client"
 
@@ -592,6 +593,26 @@ async function executeDiagnosisTask(
       return { success: true, responseText: fullText }
     }
 
+    if (task.task_type === "hia_workflow") {
+      const result = await callHiaWorkflow(
+        task.workflow_id || "",
+        task.bot_id || "",
+        replaceTemplateVars(task.workflow_parameters || '{"limit":0}'), task.id, signal,
+      )
+      let saved = 0
+      try {
+        for (const diagnosis of result.diagnoses) {
+          signal?.throwIfAborted()
+          await saveDiagnosisResult(diagnosis)
+          saved++
+        }
+      } catch (error) {
+        return { success: false, responseText: JSON.stringify({ saved, ...result.summary }),
+          error: `HIA 已入库 ${saved}/${result.diagnoses.length} 条；${error instanceof Error ? error.message : "保存失败"}` }
+      }
+      return { success: true, responseText: JSON.stringify({ saved, ...result.summary }) }
+    }
+
     if (task.task_type === "workflow" && task.workflow_id) {
       let params: Record<string, unknown> = {}
       if (task.workflow_parameters) {
@@ -664,7 +685,7 @@ export async function executeTask(taskId: number, force = false): Promise<void> 
 
 
   // 记录执行日志
-  const { data: logEntry } = await supabase
+  const { data: logEntry, error: logError } = await supabase
     .from("task_execution_logs")
     .insert({
       task_id: taskId,
@@ -674,11 +695,13 @@ export async function executeTask(taskId: number, force = false): Promise<void> 
     .select()
     .limit(1)
 
+  if (logError || !logEntry?.length) throw new Error("无法创建执行日志，已取消工作流调用")
+
   try {
     const result = await executeDiagnosisTask(task, controller.signal)
 
     if (logEntry && logEntry.length > 0) {
-      await supabase
+      const { error: updateLogError } = await supabase
         .from("task_execution_logs")
         .update({
           status: result.success ? "success" : "failed",
@@ -689,6 +712,7 @@ export async function executeTask(taskId: number, force = false): Promise<void> 
           completed_at: new Date().toISOString(),
         })
         .eq("id", logEntry[0].id)
+      if (updateLogError) throw new Error("诊断执行完成，但更新执行日志失败，请核对诊断记录后再决定是否重试")
     }
 
     await supabase
